@@ -11,6 +11,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Logger } from "pino";
 import { z } from "zod";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
+import { FleetRegistry } from "./fleet/registry.js";
+import { NineRouter } from "./router/index.js";
+import { EgressManager } from "./egress/index.js";
+import { ClefCouncil } from "./clef/index.js";
+import { GoalEngine } from "./goal/index.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -474,6 +479,11 @@ export interface PaseoDaemon {
   serviceProxy: ServiceProxySubsystem;
   scriptRuntimeStore: WorkspaceScriptRuntimeStore;
   browserToolsBroker: BrowserToolsBroker;
+  fleetRegistry: FleetRegistry;
+  nineRouter: NineRouter;
+  egressManager: EgressManager;
+  clefCouncil: ClefCouncil;
+  goalEngine: GoalEngine;
   start(): Promise<void>;
   stop(): Promise<void>;
   getListenTarget(): ListenTarget | null;
@@ -619,6 +629,18 @@ export async function createPaseoDaemon(
   });
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
+
+  const fleetRegistry = new FleetRegistry({ logger });
+  const nineRouter = new NineRouter({ registry: fleetRegistry, logger });
+  const egressManager = new EgressManager({ logger });
+  const clefCouncil = new ClefCouncil({ logger });
+  const goalEngine = new GoalEngine({
+    registry: fleetRegistry,
+    router: nineRouter,
+    council: clefCouncil,
+    logger,
+    workspaceDir: config.paseoHome,
+  });
   const pluginRuntime: PluginService = new PluginService(logger, daemonConfigStore, daemonVersion, {
     usageAgents: {
       hasAgent: (id) => agentManager.getAgent(id) !== null,
@@ -810,6 +832,44 @@ export async function createPaseoDaemon(
       version: daemonVersion,
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
+  });
+
+  // Zencode Swarm & Autonomous endpoints
+  app.get("/api/fleet/nodes", (_req, res) => {
+    res.json({ nodes: fleetRegistry.getAllNodes() });
+  });
+
+  app.post("/api/fleet/route", (req, res) => {
+    try {
+      const decision = nineRouter.route(req.body);
+      res.json(decision);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/goal/start", (req, res) => {
+    const { intent, budgetCapTokens } = req.body || {};
+    goalEngine
+      .startGoal(intent || "Autonomous task", budgetCapTokens)
+      .then((goalId) => {
+        res.json({ goalId, status: goalEngine.getStatus() });
+        return goalId;
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      });
+  });
+
+  app.get("/api/goal/status", (_req, res) => {
+    res.json({ status: goalEngine.getStatus(), tasks: goalEngine.getTasks() });
+  });
+
+  app.post("/api/goal/cancel", (_req, res) => {
+    goalEngine.cancelGoal();
+    res.json({ status: "cancelled" });
   });
 
   const handleFileDownload = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -1787,6 +1847,7 @@ export async function createPaseoDaemon(
       // model loading doesn't block the server from accepting connections.
       speechService.start();
       scriptHealthMonitor.start();
+      await fleetRegistry.initialize();
     } catch (error) {
       localCredential = null;
       await deleteLocalCredential(config.paseoHome);
@@ -1794,6 +1855,7 @@ export async function createPaseoDaemon(
       await pluginRuntime.stopAllPlugins().catch(() => undefined);
       await serviceProxy.stopStandalone().catch(() => undefined);
       await agentProviderRuntime.shutdown().catch(() => undefined);
+      await fleetRegistry.shutdown().catch(() => undefined);
       if (mainStarted) {
         httpServer.closeAllConnections();
         await new Promise<void>((resolve) => httpServer.close(() => resolve()));
@@ -1813,6 +1875,8 @@ export async function createPaseoDaemon(
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();
+    goalEngine.cancelGoal();
+    await fleetRegistry.shutdown().catch(() => undefined);
     // Freeze both ingress and registration before taking the agent closure snapshot.
     wsServer?.prepareForShutdown();
     agentManager.prepareForShutdown();
@@ -1860,6 +1924,11 @@ export async function createPaseoDaemon(
     serviceProxy,
     scriptRuntimeStore,
     browserToolsBroker,
+    fleetRegistry,
+    nineRouter,
+    egressManager,
+    clefCouncil,
+    goalEngine,
     start,
     stop,
     getListenTarget: () => boundListenTarget,
