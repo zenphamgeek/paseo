@@ -21,6 +21,7 @@ import { getHermesManager } from "./hermes/index.js";
 import { getZencodeOAuthManager } from "./auth/zencode-oauth-manager.js";
 import { getZencodeMcpRegistry } from "./mcp/zencode-mcp-registry.js";
 import { getZencodeProjectMigrationService } from "./projects/zencode-project-migration.js";
+import { getOpenCodeFleetManager } from "./fleet/opencode-fleet-manager.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -914,6 +915,71 @@ function mountZencodeFleetAndGoalEndpoints(
         res.status(500).json({ success: false, error: message });
       }
     })();
+  });
+
+  // OpenCode Fleet Swarm Endpoints
+  const openCodeFleet = getOpenCodeFleetManager();
+
+  app.get("/api/fleet/opencode/nodes", (_req, res) => {
+    void (async () => {
+      try {
+        const nodes = await openCodeFleet.getNodes();
+        res.json({ nodes });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/opencode/sync", (_req, res) => {
+    void (async () => {
+      try {
+        const result = await openCodeFleet.syncAccounts();
+        res.json({ success: true, ...result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/opencode/dispatch", (req, res) => {
+    void (async () => {
+      try {
+        const { nodeId, prompt, model, timeoutMs } = req.body || {};
+        if (!nodeId || !prompt) {
+          res.status(400).json({ error: "Missing required parameters: nodeId and prompt" });
+          return;
+        }
+        const result = await openCodeFleet.dispatchJob(nodeId, prompt, model, timeoutMs);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/opencode/parallel", (req, res) => {
+    void (async () => {
+      try {
+        const { prompt, model, nodes, timeoutMs } = req.body || {};
+        if (!prompt) {
+          res.status(400).json({ error: "Missing required parameter: prompt" });
+          return;
+        }
+        const result = await openCodeFleet.dispatchParallel({ prompt, model, nodes, timeoutMs });
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/opencode/jobs", (_req, res) => {
+    res.json({ jobs: openCodeFleet.getJobHistory() });
   });
 
   app.post("/api/goal/start", (req, res) => {
