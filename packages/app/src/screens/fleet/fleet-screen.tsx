@@ -218,9 +218,11 @@ export function FleetScreen() {
     telemetry,
     isLoading,
     isRefreshing,
+    isTelemetryHalted,
     refreshQuotas,
     dispatchTask,
     toggleAutonomous,
+    toggleHaltTelemetry,
   } = useFleetData();
 
   const handleSetNodes = useCallback(() => setActiveTab("nodes"), []);
@@ -283,6 +285,8 @@ export function FleetScreen() {
               telemetry={telemetry}
               isLoading={isLoading}
               onRefresh={refreshQuotas}
+              isHalted={isTelemetryHalted}
+              onToggleHalt={toggleHaltTelemetry}
             />
           ) : null}
 

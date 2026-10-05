@@ -9,6 +9,8 @@ import {
   Database,
   Layers,
   Network,
+  Pause,
+  Play,
   RefreshCw,
   Send,
   Shield,
@@ -25,6 +27,8 @@ interface FleetTelemetryViewProps {
   telemetry: SwarmTelemetrySnapshot | null;
   isLoading: boolean;
   onRefresh: () => void;
+  isHalted?: boolean;
+  onToggleHalt?: () => void;
 }
 
 function DualOnnxCard({ dualOnnx }: { dualOnnx?: DualOnnxTelemetry }) {
@@ -313,7 +317,13 @@ function HermesRuntimeCard({ hermes }: { hermes?: HermesHealthStatus }) {
   );
 }
 
-export function FleetTelemetryView({ telemetry, isLoading, onRefresh }: FleetTelemetryViewProps) {
+export function FleetTelemetryView({
+  telemetry,
+  isLoading,
+  onRefresh,
+  isHalted = false,
+  onToggleHalt,
+}: FleetTelemetryViewProps) {
   if (!telemetry && isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -324,7 +334,18 @@ export function FleetTelemetryView({ telemetry, isLoading, onRefresh }: FleetTel
   }
 
   const isClusterHealthy = telemetry?.clusterStatus === "healthy";
-  const clusterLabel = telemetry?.clusterStatus?.toUpperCase() || "HEALTHY";
+  let clusterLabel = telemetry?.clusterStatus?.toUpperCase() || "HEALTHY";
+  let statusPillStyle = styles.statusPillGreen;
+  let statusTextStyle = styles.textGreen;
+
+  if (isHalted) {
+    clusterLabel = "STREAM HALTED";
+    statusPillStyle = styles.statusPillAmber;
+    statusTextStyle = styles.textAmber;
+  } else if (!isClusterHealthy) {
+    statusPillStyle = styles.statusPillRed;
+    statusTextStyle = styles.textRed;
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -333,24 +354,33 @@ export function FleetTelemetryView({ telemetry, isLoading, onRefresh }: FleetTel
         <View style={styles.sectionHeaderLeft}>
           <Activity size={20} color={styles.accentText.color} />
           <Text style={styles.sectionTitle}>Telemetry & Health Spine</Text>
-          <View
-            style={[
-              styles.statusPill,
-              isClusterHealthy ? styles.statusPillGreen : styles.statusPillRed,
-            ]}
-          >
-            <Text
-              style={[styles.statusPillText, isClusterHealthy ? styles.textGreen : styles.textRed]}
-            >
-              {clusterLabel}
-            </Text>
+          <View style={[styles.statusPill, statusPillStyle]}>
+            <Text style={[styles.statusPillText, statusTextStyle]}>{clusterLabel}</Text>
           </View>
         </View>
 
-        <Pressable onPress={onRefresh} style={styles.refreshBtn} disabled={isLoading}>
-          <RefreshCw size={13} color={styles.mutedText.color} />
-          <Text style={styles.refreshBtnText}>{isLoading ? "Refreshing..." : "Sync"}</Text>
-        </Pressable>
+        <View style={styles.headerRightActions}>
+          {onToggleHalt && (
+            <Pressable
+              onPress={onToggleHalt}
+              style={[styles.haltBtn, isHalted && styles.haltBtnActive]}
+            >
+              {isHalted ? (
+                <Play size={13} color={styles.warningText.color} />
+              ) : (
+                <Pause size={13} color={styles.mutedText.color} />
+              )}
+              <Text style={[styles.haltBtnText, isHalted && styles.haltBtnTextActive]}>
+                {isHalted ? "Resume Telemetry" : "Halt Telemetry"}
+              </Text>
+            </Pressable>
+          )}
+
+          <Pressable onPress={onRefresh} style={styles.refreshBtn} disabled={isLoading}>
+            <RefreshCw size={13} color={styles.mutedText.color} />
+            <Text style={styles.refreshBtnText}>{isLoading ? "Refreshing..." : "Sync"}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Grid: Dual ONNX & Telegram Alerting */}
@@ -412,10 +442,45 @@ const styles = StyleSheet.create((theme) => ({
   statusPillRed: {
     backgroundColor: theme.colors.statusDangerTint,
   },
+  statusPillAmber: {
+    backgroundColor: theme.colors.statusWarningTint,
+  },
   statusPillText: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  textAmber: {
+    color: theme.colors.statusWarning,
+  },
+  headerRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  haltBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  haltBtnActive: {
+    borderColor: theme.colors.statusWarning,
+    backgroundColor: theme.colors.statusWarningTint,
+  },
+  haltBtnText: {
+    fontSize: 12,
+    color: theme.colors.foregroundMuted,
+    fontWeight: "500",
+  },
+  haltBtnTextActive: {
+    color: theme.colors.statusWarning,
+    fontWeight: "700",
   },
   refreshBtn: {
     flexDirection: "row",

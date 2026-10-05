@@ -136,6 +136,12 @@ export function useFleetData() {
     return json;
   }, []);
 
+  const [isTelemetryHalted, setIsTelemetryHalted] = useState(false);
+
+  const toggleHaltTelemetry = useCallback(() => {
+    setIsTelemetryHalted((prev) => !prev);
+  }, []);
+
   const toggleAutonomous = useCallback(() => {
     setSummary((prev) => ({
       ...prev,
@@ -147,16 +153,18 @@ export function useFleetData() {
     mountedRef.current = true;
     fetchAllFleetData();
 
-    // Auto-refresh every 8 seconds
+    // Auto-refresh every 8 seconds when not halted
     const interval = setInterval(() => {
-      fetchAllFleetData(true);
+      if (!isTelemetryHalted) {
+        fetchAllFleetData(true);
+      }
     }, 8000);
 
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchAllFleetData]);
+  }, [fetchAllFleetData, isTelemetryHalted]);
 
   return {
     nodes,
@@ -166,10 +174,12 @@ export function useFleetData() {
     telemetry,
     isLoading,
     isRefreshing,
+    isTelemetryHalted,
     lastUpdated,
     error,
     refreshQuotas,
     dispatchTask,
     toggleAutonomous,
+    toggleHaltTelemetry,
   };
 }
