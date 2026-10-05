@@ -51,4 +51,22 @@ describe("NineRouter", () => {
 
     await registry.shutdown();
   });
+
+  it("should evaluate tokenomics admission with zero-cost gating for local tasks", async () => {
+    const registry = new FleetRegistry({ logger });
+    await registry.initialize();
+    const router = new NineRouter({ registry, logger });
+
+    const admission = router.getAdmissionController().evaluateAdmission({
+      taskId: "test-task-tokenomics",
+      prompt: "Run oxlint and vitest to check codebase health",
+      estimatedTokens: 400,
+    });
+
+    expect(admission.decision).toBe("local");
+    expect(admission.billedCost).toBe(0);
+    expect(admission.source).toBe("local_onnx");
+
+    await registry.shutdown();
+  });
 });

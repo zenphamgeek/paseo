@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import type { RouteDecision, RouteRequest } from "@getpaseo/protocol/fleet-types";
 import type { FleetRegistry } from "../fleet/registry.js";
+import { TokenomicsAdmissionController } from "../onnx/index.js";
 
 export interface LatencyEWMA {
   valueMs: number;
@@ -11,16 +12,35 @@ export class NineRouter {
   private readonly registry: FleetRegistry;
   private readonly logger: Logger;
   private readonly latencyStats = new Map<string, LatencyEWMA>();
+  private readonly admissionController: TokenomicsAdmissionController;
 
   constructor(options: { registry: FleetRegistry; logger: Logger }) {
     this.registry = options.registry;
     this.logger = options.logger.child({ module: "nine-router" });
+    this.admissionController = new TokenomicsAdmissionController();
+  }
+
+  public getAdmissionController(): TokenomicsAdmissionController {
+    return this.admissionController;
   }
 
   public route(req: RouteRequest): RouteDecision {
+    const admission = this.admissionController.evaluateAdmission({
+      taskId: req.taskId,
+      prompt: req.prompt,
+      estimatedTokens: req.tokensEstimate,
+      preferredTier: req.preferredTier === "standard" ? "local" : req.preferredTier,
+    });
+
     this.logger.info(
-      { taskId: req.taskId, tier: req.preferredTier, tokensEstimate: req.tokensEstimate },
-      "Calculating optimal route decision",
+      {
+        taskId: req.taskId,
+        tier: req.preferredTier,
+        tokensEstimate: req.tokensEstimate,
+        admissionDecision: admission.decision,
+        billedCost: admission.billedCost,
+      },
+      "Calculating optimal route decision with tokenomics admission",
     );
 
     // 1. Build prioritized fallback cascade based on tier
