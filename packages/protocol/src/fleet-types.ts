@@ -121,3 +121,97 @@ export interface GoalStatusSnapshot {
   budgetTokensUsed: number;
   budgetCapTokens: number;
 }
+
+export const ClefCouncilModeSchema = z.enum(["deterministic-only", "local", "cloud", "hybrid"]);
+export type ClefCouncilMode = z.infer<typeof ClefCouncilModeSchema>;
+
+export const LlmProviderTypeSchema = z.enum([
+  "ollama",
+  "vllm",
+  "llamacpp",
+  "9router",
+  "nebula",
+  "openai-compatible",
+]);
+export type LlmProviderType = z.infer<typeof LlmProviderTypeSchema>;
+
+export const LlmEndpointConfigSchema = z.object({
+  baseUrl: z.string(),
+  model: z.string(),
+  provider: LlmProviderTypeSchema,
+  apiKeyEnv: z.string().optional(),
+  temperature: z.number().default(0.1),
+  seed: z.number().int().optional(),
+  maxTokens: z.number().int().default(4096),
+  timeoutMs: z.number().int().default(45000),
+});
+export type LlmEndpointConfig = z.infer<typeof LlmEndpointConfigSchema>;
+
+export const EscalationPolicySchema = z.object({
+  enabled: z.boolean().default(true),
+  minLocalConfidence: z.number().default(0.8),
+  criticalTaskClasses: z
+    .array(z.string())
+    .default(["auth", "security", "crypto", "database", "infra"]),
+  escalationPaths: z
+    .array(z.string())
+    .default(["**/auth/**", "**/security/**", "**/*.pem", "**/migrations/**"]),
+  escalateOnAnyFlag: z.boolean().default(true),
+});
+export type EscalationPolicy = z.infer<typeof EscalationPolicySchema>;
+
+export const FallbackPolicySchema = z.object({
+  onLlmError: z.enum(["fail-closed", "fail-open", "degrade-to-local"]).default("degrade-to-local"),
+  maxRetries: z.number().int().default(2),
+  retryBackoffMs: z.number().int().default(2000),
+  cloudToLocalFallback: z.boolean().default(true),
+});
+export type FallbackPolicy = z.infer<typeof FallbackPolicySchema>;
+
+export const SemanticGateIdSchema = z.enum([
+  "model-as-judge",
+  "anti-cheat",
+  "security-audit",
+  "intent-adherence",
+]);
+export type SemanticGateId = z.infer<typeof SemanticGateIdSchema>;
+
+export const JudgeVerdictSchema = z.object({
+  gateId: SemanticGateIdSchema,
+  verdict: z.enum(["pass", "fail", "flag"]),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  flags: z.array(z.string()).default([]),
+  model: z.string(),
+  tier: z.enum(["local", "cloud"]),
+  latencyMs: z.number().nonnegative(),
+  rawOutputHash: z.string(),
+});
+export type JudgeVerdict = z.infer<typeof JudgeVerdictSchema>;
+
+export const ClefCouncilConfigSchema = z.object({
+  mode: ClefCouncilModeSchema.default("hybrid"),
+  deterministicGates: z
+    .object({
+      enabled: z.array(z.string()).default(["lint", "types", "unit_tests", "security_audit"]),
+      failFast: z.boolean().default(true),
+    })
+    .default(() => ({
+      enabled: ["lint", "types", "unit_tests", "security_audit"],
+      failFast: true,
+    })),
+  local: z
+    .object({
+      members: z.array(LlmEndpointConfigSchema).default([]),
+    })
+    .optional(),
+  cloud: z
+    .object({
+      members: z.array(LlmEndpointConfigSchema).default([]),
+    })
+    .optional(),
+  escalation: EscalationPolicySchema.default(() => EscalationPolicySchema.parse({})),
+  fallback: FallbackPolicySchema.default(() => FallbackPolicySchema.parse({})),
+  globalSlaMs: z.number().int().default(180000),
+});
+export type ClefCouncilConfig = z.infer<typeof ClefCouncilConfigSchema>;
