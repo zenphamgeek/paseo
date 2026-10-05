@@ -114,6 +114,41 @@ describe("FleetAuthView data model & ecosystem invariants", () => {
       account: "Phamvuthang (@zenpham_bot)",
       maskedToken: "7056...IP8c",
     },
+    figma: {
+      provider: "figma",
+      label: "Figma (Design-to-Code)",
+      ecosystem: "workspace",
+      status: "unconfigured",
+      authType: "none",
+    },
+    gdrive: {
+      provider: "gdrive",
+      label: "Google Drive (Docs & Sheets)",
+      ecosystem: "workspace",
+      status: "unconfigured",
+      authType: "none",
+    },
+    canva: {
+      provider: "canva",
+      label: "Canva (Creative Visuals)",
+      ecosystem: "workspace",
+      status: "unconfigured",
+      authType: "none",
+    },
+    notion: {
+      provider: "notion",
+      label: "Notion Knowledge & Docs",
+      ecosystem: "workspace",
+      status: "unconfigured",
+      authType: "none",
+    },
+    linear: {
+      provider: "linear",
+      label: "Linear (Issue Tracker)",
+      ecosystem: "workspace",
+      status: "unconfigured",
+      authType: "none",
+    },
   };
 
   it("calculates cluster auth percentage and counts accurately", () => {
@@ -122,16 +157,17 @@ describe("FleetAuthView data model & ecosystem invariants", () => {
     const authCount = items.filter((i) => i.status === "authenticated").length;
     const percent = Math.round((authCount / total) * 100);
 
-    expect(total).toBe(14);
+    expect(total).toBe(19);
     expect(authCount).toBe(5);
-    expect(percent).toBe(36);
+    expect(percent).toBe(26);
   });
 
-  it("categorizes all 14 plugins into 5 clean ecosystem groups", () => {
+  it("categorizes all 19 plugins into 6 clean ecosystem groups", () => {
     const groups: Record<EcosystemType, PluginOAuthStatus[]> = {
       agy: [],
       opencode: [],
       codex: [],
+      workspace: [],
       paseo: [],
       infra: [],
     };
@@ -144,6 +180,7 @@ describe("FleetAuthView data model & ecosystem invariants", () => {
     expect(groups.agy).toHaveLength(1);
     expect(groups.opencode).toHaveLength(2);
     expect(groups.codex).toHaveLength(2);
+    expect(groups.workspace).toHaveLength(5);
     expect(groups.paseo).toHaveLength(7);
     expect(groups.infra).toHaveLength(2);
   });

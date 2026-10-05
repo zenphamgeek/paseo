@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 
 export type ProviderAuthType = "oauth" | "api_key" | "cli_session" | "none";
 export type ProviderAuthStatus = "authenticated" | "discovered" | "unconfigured";
-export type EcosystemType = "agy" | "opencode" | "codex" | "paseo" | "infra";
+export type EcosystemType = "agy" | "opencode" | "codex" | "paseo" | "infra" | "workspace";
 
 export interface ProviderAuthInfo {
   provider: string;
@@ -119,6 +119,36 @@ export const SUPPORTED_PLUGINS: Array<{
     envKeys: ["MUSE_TOKEN"],
   },
   {
+    id: "figma",
+    label: "Figma (Design-to-Code)",
+    ecosystem: "workspace",
+    envKeys: ["FIGMA_ACCESS_TOKEN", "FIGMA_TOKEN", "FIGMA_PERSONAL_TOKEN"],
+  },
+  {
+    id: "gdrive",
+    label: "Google Drive (Docs & Sheets)",
+    ecosystem: "workspace",
+    envKeys: ["GOOGLE_DRIVE_TOKEN", "GDRIVE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS"],
+  },
+  {
+    id: "canva",
+    label: "Canva (Creative Visuals)",
+    ecosystem: "workspace",
+    envKeys: ["CANVA_API_KEY", "CANVA_TOKEN"],
+  },
+  {
+    id: "notion",
+    label: "Notion Knowledge & Docs",
+    ecosystem: "workspace",
+    envKeys: ["NOTION_API_KEY", "NOTION_TOKEN"],
+  },
+  {
+    id: "linear",
+    label: "Linear (Issue Tracker)",
+    ecosystem: "workspace",
+    envKeys: ["LINEAR_API_KEY", "LINEAR_TOKEN"],
+  },
+  {
     id: "github",
     label: "GitHub Version Control",
     ecosystem: "infra",
@@ -129,6 +159,62 @@ export const SUPPORTED_PLUGINS: Array<{
     label: "Telegram Alert Gateway",
     ecosystem: "infra",
     envKeys: ["TELEGRAM_BOT_TOKEN"],
+  },
+];
+
+interface FileHarvestConfig {
+  pluginId: string;
+  ecosystem: EcosystemType;
+  authType: ProviderAuthType;
+  subPath: string[];
+  extract: (json: Record<string, unknown>) => string | undefined;
+}
+
+function extractFirstString(data: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const val = data[key];
+    if (typeof val === "string" && val.trim().length > 0) {
+      return val.trim();
+    }
+  }
+  return undefined;
+}
+
+const FILE_HARVEST_CONFIGS: FileHarvestConfig[] = [
+  {
+    pluginId: "cursor",
+    ecosystem: "paseo",
+    authType: "oauth",
+    subPath: [".config", "cursor", "auth.json"],
+    extract: (data) => extractFirstString(data, ["accessToken"]),
+  },
+  {
+    pluginId: "grok",
+    ecosystem: "paseo",
+    authType: "oauth",
+    subPath: [".grok", "auth.json"],
+    extract: (data) => extractFirstString(data, ["access_token", "apiKey"]),
+  },
+  {
+    pluginId: "figma",
+    ecosystem: "workspace",
+    authType: "oauth",
+    subPath: [".config", "figma", "auth.json"],
+    extract: (data) => extractFirstString(data, ["token", "accessToken"]),
+  },
+  {
+    pluginId: "gdrive",
+    ecosystem: "workspace",
+    authType: "oauth",
+    subPath: [".config", "gdrive", "credentials.json"],
+    extract: (data) => extractFirstString(data, ["token", "access_token"]),
+  },
+  {
+    pluginId: "notion",
+    ecosystem: "workspace",
+    authType: "api_key",
+    subPath: [".config", "notion", "auth.json"],
+    extract: (data) => extractFirstString(data, ["apiKey", "token"]),
   },
 ];
 
@@ -590,89 +676,70 @@ export class ZencodeOAuthManager {
     return { provider: "telegram", ecosystem: "infra", found: false, authType: "none" };
   }
 
-  // 7. Generic Environment & Plugin Files Harvester (Cursor, Grok, Kimi, MiniMax, ZAI)
-  private harvestOtherPlugins(pluginId: string, ecosystem: EcosystemType): AutoConfigHarvestItem {
-    const home = homedir();
+  private harvestFromFileStore(config: FileHarvestConfig): AutoConfigHarvestItem | null {
+    const filePath = join(homedir(), ...config.subPath);
+    if (!existsSync(filePath)) return null;
 
-    // Check specific file stores
-    if (pluginId === "cursor") {
-      const cursorAuth = join(home, ".config", "cursor", "auth.json");
-      if (existsSync(cursorAuth)) {
-        try {
-          const raw = JSON.parse(readFileSync(cursorAuth, "utf-8")) as { accessToken?: string };
-          if (raw.accessToken) {
-            this.memoryCredentials.set("cursor", {
-              token: raw.accessToken,
-              authType: "oauth",
-              source: cursorAuth,
-              ecosystem: "paseo",
-            });
-            return {
-              provider: "cursor",
-              ecosystem: "paseo",
-              found: true,
-              source: cursorAuth,
-              authType: "oauth",
-            };
-          }
-        } catch {
-          // Continue
-        }
+    try {
+      const raw = JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+      const token = config.extract(raw);
+      if (token) {
+        this.memoryCredentials.set(config.pluginId, {
+          token,
+          authType: config.authType,
+          source: filePath,
+          ecosystem: config.ecosystem,
+        });
+        return {
+          provider: config.pluginId,
+          ecosystem: config.ecosystem,
+          found: true,
+          source: filePath,
+          authType: config.authType,
+        };
       }
+    } catch {
+      // Ignore invalid files
     }
 
-    if (pluginId === "grok") {
-      const grokAuth = join(home, ".grok", "auth.json");
-      if (existsSync(grokAuth)) {
-        try {
-          const raw = JSON.parse(readFileSync(grokAuth, "utf-8")) as {
-            access_token?: string;
-            apiKey?: string;
-          };
-          const token = raw.access_token || raw.apiKey;
-          if (token) {
-            this.memoryCredentials.set("grok", {
-              token,
-              authType: "oauth",
-              source: grokAuth,
-              ecosystem: "paseo",
-            });
-            return {
-              provider: "grok",
-              ecosystem: "paseo",
-              found: true,
-              source: grokAuth,
-              authType: "oauth",
-            };
-          }
-        } catch {
-          // Continue
-        }
-      }
-    }
+    return null;
+  }
 
-    // Check environment variables
+  private harvestFromEnv(pluginId: string, ecosystem: EcosystemType): AutoConfigHarvestItem | null {
     const pluginDef = SUPPORTED_PLUGINS.find((p) => p.id === pluginId);
-    if (pluginDef) {
-      for (const envKey of pluginDef.envKeys) {
-        const val = process.env[envKey];
-        if (val) {
-          this.memoryCredentials.set(pluginId, {
-            token: val,
-            authType: "api_key",
-            source: `env:${envKey}`,
-            ecosystem,
-          });
-          return {
-            provider: pluginId,
-            ecosystem,
-            found: true,
-            source: `env:${envKey}`,
-            authType: "api_key",
-          };
-        }
+    if (!pluginDef) return null;
+
+    for (const envKey of pluginDef.envKeys) {
+      const val = process.env[envKey];
+      if (val) {
+        this.memoryCredentials.set(pluginId, {
+          token: val,
+          authType: "api_key",
+          source: `env:${envKey}`,
+          ecosystem,
+        });
+        return {
+          provider: pluginId,
+          ecosystem,
+          found: true,
+          source: `env:${envKey}`,
+          authType: "api_key",
+        };
       }
     }
+    return null;
+  }
+
+  // 7. Generic Environment & Plugin Files Harvester (Cursor, Grok, Kimi, MiniMax, ZAI, Workspace)
+  private harvestOtherPlugins(pluginId: string, ecosystem: EcosystemType): AutoConfigHarvestItem {
+    const fileConfig = FILE_HARVEST_CONFIGS.find((c) => c.pluginId === pluginId);
+    if (fileConfig) {
+      const result = this.harvestFromFileStore(fileConfig);
+      if (result) return result;
+    }
+
+    const envResult = this.harvestFromEnv(pluginId, ecosystem);
+    if (envResult) return envResult;
 
     return { provider: pluginId, ecosystem, found: false, authType: "none" };
   }
@@ -769,6 +836,13 @@ export class ZencodeOAuthManager {
     items.push(this.harvestOtherPlugins("zai", "paseo"));
     items.push(this.harvestOtherPlugins("muse", "paseo"));
 
+    // Harvest Workspace & Design Integrations (Codex Engine)
+    items.push(this.harvestOtherPlugins("figma", "workspace"));
+    items.push(this.harvestOtherPlugins("gdrive", "workspace"));
+    items.push(this.harvestOtherPlugins("canva", "workspace"));
+    items.push(this.harvestOtherPlugins("notion", "workspace"));
+    items.push(this.harvestOtherPlugins("linear", "workspace"));
+
     this.persist();
     this.syncToPluginStores();
 
@@ -854,49 +928,32 @@ export class ZencodeOAuthManager {
   }
 
   public applyToEnvironment(): void {
-    const opencode = this.getRawCredential("opencode");
-    if (opencode && !process.env.OPENCODE_API_KEY) {
-      process.env.OPENCODE_API_KEY = opencode;
-    }
+    const envKeyMappings: Record<string, string> = {
+      opencode: "OPENCODE_API_KEY",
+      codex: "OPENAI_API_KEY",
+      claude: "ANTHROPIC_API_KEY",
+      grok: "GROK_TOKEN",
+      cursor: "CURSOR_TOKEN",
+      kimi: "KIMI_TOKEN",
+      minimax: "MINIMAX_API_KEY",
+      zai: "ZAI_API_KEY",
+      figma: "FIGMA_ACCESS_TOKEN",
+      gdrive: "GOOGLE_DRIVE_TOKEN",
+      canva: "CANVA_API_KEY",
+      notion: "NOTION_API_KEY",
+      linear: "LINEAR_API_KEY",
+    };
 
-    const codex = this.getRawCredential("codex");
-    if (codex && !process.env.OPENAI_API_KEY) {
-      process.env.OPENAI_API_KEY = codex;
-    }
-
-    const claude = this.getRawCredential("claude");
-    if (claude && !process.env.ANTHROPIC_API_KEY) {
-      process.env.ANTHROPIC_API_KEY = claude;
+    for (const [provider, envKey] of Object.entries(envKeyMappings)) {
+      const cred = this.getRawCredential(provider);
+      if (cred && !process.env[envKey]) {
+        process.env[envKey] = cred;
+      }
     }
 
     const agy = this.getRawCredential("antigravity");
     if (agy && !process.env.GEMINI_API_KEY && agy !== "local_cli_authenticated") {
       process.env.GEMINI_API_KEY = agy;
-    }
-
-    const grok = this.getRawCredential("grok");
-    if (grok && !process.env.GROK_TOKEN) {
-      process.env.GROK_TOKEN = grok;
-    }
-
-    const cursor = this.getRawCredential("cursor");
-    if (cursor && !process.env.CURSOR_TOKEN) {
-      process.env.CURSOR_TOKEN = cursor;
-    }
-
-    const kimi = this.getRawCredential("kimi");
-    if (kimi && !process.env.KIMI_TOKEN) {
-      process.env.KIMI_TOKEN = kimi;
-    }
-
-    const minimax = this.getRawCredential("minimax");
-    if (minimax && !process.env.MINIMAX_API_KEY) {
-      process.env.MINIMAX_API_KEY = minimax;
-    }
-
-    const zai = this.getRawCredential("zai");
-    if (zai && !process.env.ZAI_API_KEY) {
-      process.env.ZAI_API_KEY = zai;
     }
   }
 }

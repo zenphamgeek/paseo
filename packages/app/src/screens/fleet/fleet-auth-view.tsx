@@ -61,6 +61,11 @@ const ECOSYSTEM_LABELS: Record<
     desc: "GitHub CLI OAuth sessions and Telegram incident broadcast gateway",
     icon: Terminal,
   },
+  workspace: {
+    title: "Workspace & Design Integrations (Codex Engine)",
+    desc: "Figma (Design-to-Code), Google Drive (PRDs/Sheets), Canva (Visuals), Notion & Linear",
+    icon: FolderSync,
+  },
 };
 
 function StatusBadge({
@@ -237,6 +242,7 @@ export function FleetAuthView({
       agy: [],
       opencode: [],
       codex: [],
+      workspace: [],
       paseo: [],
       infra: [],
     };
@@ -339,39 +345,45 @@ export function FleetAuthView({
       ) : null}
 
       {/* Ecosystem Groups */}
-      {(["agy", "opencode", "codex", "paseo", "infra"] as EcosystemType[]).map((ecoKey) => {
-        const ecoMeta = ECOSYSTEM_LABELS[ecoKey];
-        const plugins = grouped[ecoKey];
-        const IconComponent = ecoMeta.icon;
+      {(["agy", "opencode", "codex", "workspace", "paseo", "infra"] as EcosystemType[]).map(
+        (ecoKey) => {
+          const ecoMeta = ECOSYSTEM_LABELS[ecoKey];
+          const plugins = grouped[ecoKey];
+          const IconComponent = ecoMeta.icon;
 
-        if (!plugins || plugins.length === 0) return null;
+          if (!plugins || plugins.length === 0) return null;
 
-        return (
-          <View key={ecoKey} style={styles.ecosystemSection}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderLeft}>
-                <IconComponent size={18} color={styles.accentText.color} />
-                <View>
-                  <Text style={styles.sectionTitle}>{ecoMeta.title}</Text>
-                  <Text style={styles.sectionDesc}>{ecoMeta.desc}</Text>
+          return (
+            <View key={ecoKey} style={styles.ecosystemSection}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderLeft}>
+                  <IconComponent size={18} color={styles.accentText.color} />
+                  <View>
+                    <Text style={styles.sectionTitle}>{ecoMeta.title}</Text>
+                    <Text style={styles.sectionDesc}>{ecoMeta.desc}</Text>
+                  </View>
+                </View>
+                <View style={styles.sectionCountPill}>
+                  <Text style={styles.sectionCountText}>
+                    {plugins.filter((p) => p.status === "authenticated").length}/{plugins.length}{" "}
+                    ACTIVE
+                  </Text>
                 </View>
               </View>
-              <View style={styles.sectionCountPill}>
-                <Text style={styles.sectionCountText}>
-                  {plugins.filter((p) => p.status === "authenticated").length}/{plugins.length}{" "}
-                  ACTIVE
-                </Text>
+
+              <View style={styles.cardsGrid}>
+                {plugins.map((plugin) => (
+                  <ProviderCard
+                    key={plugin.provider}
+                    item={plugin}
+                    onOpenConfig={handleOpenModal}
+                  />
+                ))}
               </View>
             </View>
-
-            <View style={styles.cardsGrid}>
-              {plugins.map((plugin) => (
-                <ProviderCard key={plugin.provider} item={plugin} onOpenConfig={handleOpenModal} />
-              ))}
-            </View>
-          </View>
-        );
-      })}
+          );
+        },
+      )}
 
       {/* Manual Configuration Modal */}
       {selectedProvider ? (

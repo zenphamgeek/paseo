@@ -17,7 +17,7 @@ export type FleetActiveTab =
   | "telemetry"
   | "auth";
 
-export type EcosystemType = "agy" | "opencode" | "codex" | "paseo" | "infra";
+export type EcosystemType = "agy" | "opencode" | "codex" | "paseo" | "infra" | "workspace";
 
 export interface PluginOAuthStatus {
   provider: string;

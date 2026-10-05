@@ -19,6 +19,7 @@ import { GoalEngine } from "./goal/index.js";
 import { getTelemetryHub, getTelegramAlerter } from "./telemetry/index.js";
 import { getHermesManager } from "./hermes/index.js";
 import { getZencodeOAuthManager } from "./auth/zencode-oauth-manager.js";
+import { getZencodeMcpRegistry } from "./mcp/zencode-mcp-registry.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -848,6 +849,19 @@ function mountZencodeFleetAndGoalEndpoints(
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
     }
+  });
+
+  // Zencode Workspace MCP Servers Status (Figma, GDrive, Canva, Notion, Linear)
+  app.get("/api/fleet/mcp/status", (_req, res) => {
+    void (async () => {
+      try {
+        const mcpStatus = await getZencodeMcpRegistry().getMcpStatus();
+        res.json(mcpStatus);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
   });
 
   app.post("/api/goal/start", (req, res) => {
