@@ -20,6 +20,7 @@ import { getTelemetryHub, getTelegramAlerter } from "./telemetry/index.js";
 import { getHermesManager } from "./hermes/index.js";
 import { getZencodeOAuthManager } from "./auth/zencode-oauth-manager.js";
 import { getZencodeMcpRegistry } from "./mcp/zencode-mcp-registry.js";
+import { getZencodeProjectMigrationService } from "./projects/zencode-project-migration.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -860,6 +861,57 @@ function mountZencodeFleetAndGoalEndpoints(
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // Zencode Migrated Projects Swarm Endpoints
+  const projectMigration = getZencodeProjectMigrationService();
+
+  app.get("/api/fleet/projects", (_req, res) => {
+    void (async () => {
+      try {
+        const projects = await projectMigration.getProjects();
+        res.json({ projects });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/projects/migrate", (_req, res) => {
+    void (async () => {
+      try {
+        const result = await projectMigration.syncToZencodeRegistries();
+        res.json({ success: true, ...result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/projects/health", (_req, res) => {
+    void (async () => {
+      try {
+        const projects = await projectMigration.checkAllHealth();
+        res.json({ projects });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/projects/:id/verify", (req, res) => {
+    void (async () => {
+      try {
+        const result = await projectMigration.runQualityGate(req.params.id);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
       }
     })();
   });
