@@ -55,6 +55,7 @@ test-results/
 # Misc
 *.pem
 .vercel
+.brand_backups/
 
 # Local Claude configuration
 CLAUDE.local.md
