@@ -8,7 +8,30 @@ import type {
 
 export type { FleetClusterSummary, FleetJobRecord, FleetNodeSummary, ModelTier, NodeState };
 
-export type FleetActiveTab = "nodes" | "autonomous" | "council" | "runner" | "jobs" | "telemetry";
+export type FleetActiveTab =
+  | "nodes"
+  | "autonomous"
+  | "council"
+  | "runner"
+  | "jobs"
+  | "telemetry"
+  | "auth";
+
+export type EcosystemType = "agy" | "opencode" | "codex" | "paseo" | "infra";
+
+export interface PluginOAuthStatus {
+  provider: string;
+  label: string;
+  ecosystem?: EcosystemType;
+  status: "authenticated" | "discovered" | "unconfigured";
+  authType: "oauth" | "api_key" | "cli_session" | "none";
+  source?: string;
+  account?: string;
+  maskedToken?: string;
+  configuredAt?: number;
+}
+
+export type FleetAuthMatrix = Record<string, PluginOAuthStatus>;
 
 export type NodeTierFilter = "all" | "ultra" | "pro";
 

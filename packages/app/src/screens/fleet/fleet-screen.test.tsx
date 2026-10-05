@@ -135,4 +135,56 @@ describe("Fleet Dashboard state & data model", () => {
     expect(clampPercent(-10)).toBe(0);
     expect(clampPercent(62.94)).toBe(62.94);
   });
+
+  it("organizes plugin auth matrix into 5 ecosystems correctly", () => {
+    const mockAuth: import("./types").FleetAuthMatrix = {
+      antigravity: {
+        provider: "antigravity",
+        label: "Google Antigravity (AGY)",
+        ecosystem: "agy",
+        status: "authenticated",
+        authType: "cli_session",
+      },
+      opencode: {
+        provider: "opencode",
+        label: "OpenCode Engine & 9Router",
+        ecosystem: "opencode",
+        status: "authenticated",
+        authType: "api_key",
+      },
+      codex: {
+        provider: "codex",
+        label: "OpenAI Codex",
+        ecosystem: "codex",
+        status: "authenticated",
+        authType: "oauth",
+      },
+      copilot: {
+        provider: "copilot",
+        label: "GitHub Copilot",
+        ecosystem: "paseo",
+        status: "authenticated",
+        authType: "oauth",
+      },
+      telegram: {
+        provider: "telegram",
+        label: "Telegram Alert Gateway",
+        ecosystem: "infra",
+        status: "authenticated",
+        authType: "api_key",
+      },
+    };
+
+    const agyItems = Object.values(mockAuth).filter((p) => p.ecosystem === "agy");
+    const opencodeItems = Object.values(mockAuth).filter((p) => p.ecosystem === "opencode");
+    const codexItems = Object.values(mockAuth).filter((p) => p.ecosystem === "codex");
+    const paseoItems = Object.values(mockAuth).filter((p) => p.ecosystem === "paseo");
+    const infraItems = Object.values(mockAuth).filter((p) => p.ecosystem === "infra");
+
+    expect(agyItems).toHaveLength(1);
+    expect(opencodeItems).toHaveLength(1);
+    expect(codexItems).toHaveLength(1);
+    expect(paseoItems).toHaveLength(1);
+    expect(infraItems).toHaveLength(1);
+  });
 });

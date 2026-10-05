@@ -6,6 +6,7 @@ import {
   Activity,
   Bot,
   Cpu,
+  Key,
   ListFilter,
   RefreshCw,
   ShieldCheck,
@@ -13,6 +14,7 @@ import {
   Zap,
 } from "lucide-react-native";
 import { PageLayout } from "@/components/page-layout";
+import { FleetAuthView } from "./fleet-auth-view";
 import { FleetAutonomousView } from "./fleet-autonomous-view";
 import { FleetCouncilView } from "./fleet-council-view";
 import { FleetJobsView } from "./fleet-jobs-view";
@@ -108,8 +110,30 @@ interface FleetTabsBarProps {
   onSetRunner: () => void;
   onSetJobs: () => void;
   onSetTelemetry: () => void;
+  onSetAuth: () => void;
   nodesCount: number;
   jobsCount: number;
+}
+
+interface TabButtonProps {
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+  icon: React.ComponentType<{ size: number; color: string }>;
+  testID?: string;
+}
+
+function TabButton({ label, isActive, onPress, icon: Icon, testID }: TabButtonProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.tabBtn, isActive && styles.tabBtnActive]}
+      testID={testID}
+    >
+      <Icon size={14} color={isActive ? styles.iconAccent.color : styles.iconMuted.color} />
+      <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function FleetTabsBar({
@@ -120,88 +144,55 @@ function FleetTabsBar({
   onSetRunner,
   onSetJobs,
   onSetTelemetry,
+  onSetAuth,
   nodesCount,
   jobsCount,
 }: FleetTabsBarProps) {
   return (
     <View style={styles.tabsRow}>
-      <Pressable
+      <TabButton
+        label={`Nodes & Quotas (${nodesCount || 15})`}
+        isActive={activeTab === "nodes"}
         onPress={onSetNodes}
-        style={[styles.tabBtn, activeTab === "nodes" && styles.tabBtnActive]}
-      >
-        <Cpu
-          size={14}
-          color={activeTab === "nodes" ? styles.iconAccent.color : styles.iconMuted.color}
-        />
-        <Text style={[styles.tabText, activeTab === "nodes" && styles.tabTextActive]}>
-          Nodes & Quotas ({nodesCount || 15})
-        </Text>
-      </Pressable>
-
-      <Pressable
+        icon={Cpu}
+      />
+      <TabButton
+        label="Autonomous Swarm"
+        isActive={activeTab === "autonomous"}
         onPress={onSetAutonomous}
-        style={[styles.tabBtn, activeTab === "autonomous" && styles.tabBtnActive]}
-      >
-        <Bot
-          size={14}
-          color={activeTab === "autonomous" ? styles.iconAccent.color : styles.iconMuted.color}
-        />
-        <Text style={[styles.tabText, activeTab === "autonomous" && styles.tabTextActive]}>
-          Autonomous Swarm
-        </Text>
-      </Pressable>
-
-      <Pressable
+        icon={Bot}
+      />
+      <TabButton
+        label="Clef Council Matrix"
+        isActive={activeTab === "council"}
         onPress={onSetCouncil}
-        style={[styles.tabBtn, activeTab === "council" && styles.tabBtnActive]}
-      >
-        <ShieldCheck
-          size={14}
-          color={activeTab === "council" ? styles.iconAccent.color : styles.iconMuted.color}
-        />
-        <Text style={[styles.tabText, activeTab === "council" && styles.tabTextActive]}>
-          Clef Council Matrix
-        </Text>
-      </Pressable>
-
-      <Pressable
+        icon={ShieldCheck}
+      />
+      <TabButton
+        label="Telemetry & Health"
+        isActive={activeTab === "telemetry"}
         onPress={onSetTelemetry}
-        style={[styles.tabBtn, activeTab === "telemetry" && styles.tabBtnActive]}
-      >
-        <Activity
-          size={14}
-          color={activeTab === "telemetry" ? styles.iconAccent.color : styles.iconMuted.color}
-        />
-        <Text style={[styles.tabText, activeTab === "telemetry" && styles.tabTextActive]}>
-          Telemetry & Health
-        </Text>
-      </Pressable>
-
-      <Pressable
+        icon={Activity}
+      />
+      <TabButton
+        label="OAuth & Plugins"
+        isActive={activeTab === "auth"}
+        onPress={onSetAuth}
+        icon={Key}
+        testID="tab-btn-auth"
+      />
+      <TabButton
+        label="Swarm Prompt Runner"
+        isActive={activeTab === "runner"}
         onPress={onSetRunner}
-        style={[styles.tabBtn, activeTab === "runner" && styles.tabBtnActive]}
-      >
-        <Terminal
-          size={14}
-          color={activeTab === "runner" ? styles.iconAccent.color : styles.iconMuted.color}
-        />
-        <Text style={[styles.tabText, activeTab === "runner" && styles.tabTextActive]}>
-          Swarm Prompt Runner
-        </Text>
-      </Pressable>
-
-      <Pressable
+        icon={Terminal}
+      />
+      <TabButton
+        label={`History (${jobsCount})`}
+        isActive={activeTab === "jobs"}
         onPress={onSetJobs}
-        style={[styles.tabBtn, activeTab === "jobs" && styles.tabBtnActive]}
-      >
-        <ListFilter
-          size={14}
-          color={activeTab === "jobs" ? styles.iconAccent.color : styles.iconMuted.color}
-        />
-        <Text style={[styles.tabText, activeTab === "jobs" && styles.tabTextActive]}>
-          History ({jobsCount})
-        </Text>
-      </Pressable>
+        icon={ListFilter}
+      />
     </View>
   );
 }
@@ -216,10 +207,13 @@ export function FleetScreen() {
     jobs,
     council,
     telemetry,
+    authStatus,
     isLoading,
     isRefreshing,
     isTelemetryHalted,
     refreshQuotas,
+    runAutoConfig,
+    saveManualAuth,
     dispatchTask,
     toggleAutonomous,
     toggleHaltTelemetry,
@@ -231,6 +225,7 @@ export function FleetScreen() {
   const handleSetRunner = useCallback(() => setActiveTab("runner"), []);
   const handleSetJobs = useCallback(() => setActiveTab("jobs"), []);
   const handleSetTelemetry = useCallback(() => setActiveTab("telemetry"), []);
+  const handleSetAuth = useCallback(() => setActiveTab("auth"), []);
 
   const headerActions = useMemo(
     () => (
@@ -260,6 +255,7 @@ export function FleetScreen() {
           onSetRunner={handleSetRunner}
           onSetJobs={handleSetJobs}
           onSetTelemetry={handleSetTelemetry}
+          onSetAuth={handleSetAuth}
           nodesCount={nodes.length}
           jobsCount={jobs.length}
         />
@@ -287,6 +283,16 @@ export function FleetScreen() {
               onRefresh={refreshQuotas}
               isHalted={isTelemetryHalted}
               onToggleHalt={toggleHaltTelemetry}
+            />
+          ) : null}
+
+          {activeTab === "auth" ? (
+            <FleetAuthView
+              authStatus={authStatus}
+              isLoading={isLoading}
+              onRefresh={refreshQuotas}
+              onAutoConfig={runAutoConfig}
+              onSaveManualAuth={saveManualAuth}
             />
           ) : null}
 

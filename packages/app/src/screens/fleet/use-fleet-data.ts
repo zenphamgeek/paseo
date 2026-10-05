@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DispatchTaskPayload,
+  FleetAuthMatrix,
   FleetClusterSummary,
   FleetCouncilData,
   FleetJobRecord,
@@ -50,6 +51,7 @@ export function useFleetData() {
   const [jobs, setJobs] = useState<FleetJobRecord[]>([]);
   const [council, setCouncil] = useState<FleetCouncilData | null>(null);
   const [telemetry, setTelemetry] = useState<SwarmTelemetrySnapshot | null>(null);
+  const [authStatus, setAuthStatus] = useState<FleetAuthMatrix | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
@@ -67,23 +69,27 @@ export function useFleetData() {
         fetch(`${baseUrl}/api/fleet/jobs`),
         fetch(`${baseUrl}/api/fleet/council`),
         fetch(`${baseUrl}/api/fleet/telemetry`),
+        fetch(`${baseUrl}/api/fleet/auth/status`),
       ]);
 
       if (!mountedRef.current) return;
 
-      const [nodesData, summaryData, jobsData, councilData, telemetryData] = await Promise.all([
-        extractJsonIfOk<{ nodes?: FleetNodeSummary[] }>(settled[0]),
-        extractJsonIfOk<{ summary?: FleetClusterSummary }>(settled[1]),
-        extractJsonIfOk<{ jobs?: FleetJobRecord[] }>(settled[2]),
-        extractJsonIfOk<FleetCouncilData>(settled[3]),
-        extractJsonIfOk<SwarmTelemetrySnapshot>(settled[4]),
-      ]);
+      const [nodesData, summaryData, jobsData, councilData, telemetryData, authData] =
+        await Promise.all([
+          extractJsonIfOk<{ nodes?: FleetNodeSummary[] }>(settled[0]),
+          extractJsonIfOk<{ summary?: FleetClusterSummary }>(settled[1]),
+          extractJsonIfOk<{ jobs?: FleetJobRecord[] }>(settled[2]),
+          extractJsonIfOk<FleetCouncilData>(settled[3]),
+          extractJsonIfOk<SwarmTelemetrySnapshot>(settled[4]),
+          extractJsonIfOk<FleetAuthMatrix>(settled[5]),
+        ]);
 
       if (nodesData?.nodes) setNodes(nodesData.nodes);
       if (summaryData?.summary) setSummary(summaryData.summary);
       if (jobsData?.jobs) setJobs(jobsData.jobs);
       if (councilData) setCouncil(councilData);
       if (telemetryData) setTelemetry(telemetryData);
+      if (authData) setAuthStatus(authData);
 
       setLastUpdated(Date.now());
       setError(null);
@@ -117,6 +123,51 @@ export function useFleetData() {
       setIsRefreshing(false);
     }
   }, [fetchAllFleetData]);
+
+  const runAutoConfig = useCallback(async () => {
+    setIsRefreshing(true);
+    const baseUrl = getDaemonApiBaseUrl();
+    try {
+      const res = await fetch(`${baseUrl}/api/fleet/auth/autoconfig`, { method: "POST" });
+      if (res.ok) {
+        const authRes = await fetch(`${baseUrl}/api/fleet/auth/status`);
+        if (authRes.ok) {
+          const json = (await authRes.json()) as FleetAuthMatrix;
+          setAuthStatus(json);
+        }
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn("Auto-config failed", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  const saveManualAuth = useCallback(
+    async (provider: string, token: string, authType = "api_key", account?: string) => {
+      const baseUrl = getDaemonApiBaseUrl();
+      try {
+        const res = await fetch(`${baseUrl}/api/fleet/auth/manual`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider, token, authType, account }),
+        });
+        if (res.ok) {
+          const authRes = await fetch(`${baseUrl}/api/fleet/auth/status`);
+          if (authRes.ok) {
+            const json = (await authRes.json()) as FleetAuthMatrix;
+            setAuthStatus(json);
+          }
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    [],
+  );
 
   const dispatchTask = useCallback(async (payload: DispatchTaskPayload) => {
     const baseUrl = getDaemonApiBaseUrl();
@@ -172,12 +223,15 @@ export function useFleetData() {
     jobs,
     council,
     telemetry,
+    authStatus,
     isLoading,
     isRefreshing,
     isTelemetryHalted,
     lastUpdated,
     error,
     refreshQuotas,
+    runAutoConfig,
+    saveManualAuth,
     dispatchTask,
     toggleAutonomous,
     toggleHaltTelemetry,
