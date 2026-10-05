@@ -1202,6 +1202,7 @@ export const es: TranslationResources = {
       sessions: "Historial",
       search: "Buscar",
       schedules: "Horarios",
+      fleet: "Enjambre Fleet",
     },
     worktreeSetup: {
       title: "Configurar secuencias de comandos del árbol de trabajo",

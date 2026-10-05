@@ -38,13 +38,15 @@ cmd_ui() {
     echo -e "${GREEN}[*] Starting Zencode Daemon with Web UI...${NC}"
     echo -e "${BLUE}[*] Web Dashboard will be available at:${NC} ${BOLD}http://127.0.0.1:6768${NC}\n"
     export PASEO_WEB_UI_ENABLED=true
-    export PASEO_LISTEN="127.0.0.1:6768"
+    export ZENCODE_APP_URL="${ZENCODE_APP_URL:-http://127.0.0.1:6768}"
+    export PASEO_LISTEN="${PASEO_LISTEN:-127.0.0.1:6768}"
     exec "${REPO_ROOT}/scripts/dev-daemon.sh"
 }
 
 cmd_pair() {
     print_banner
     echo -e "${GREEN}[*] Generating Pairing QR Code and Connection Link...${NC}"
+    export ZENCODE_APP_URL="${ZENCODE_APP_URL:-http://127.0.0.1:6768}"
     node "${REPO_ROOT}/packages/cli/bin/paseo" pair
 }
 

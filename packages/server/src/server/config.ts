@@ -36,8 +36,8 @@ export {
 } from "./persisted-config.js";
 
 const DEFAULT_PORT = 6767;
-const DEFAULT_RELAY_ENDPOINT = "relay.paseo.sh:443";
-const DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
+const DEFAULT_RELAY_ENDPOINT = process.env.ZENCODE_RELAY_ENDPOINT ?? "relay.zencode.sh:443";
+const DEFAULT_APP_BASE_URL = process.env.ZENCODE_APP_URL ?? "http://127.0.0.1:6768";
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
 
 interface ResolveBundledWebUiDistDirInput {

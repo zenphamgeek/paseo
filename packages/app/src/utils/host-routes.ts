@@ -428,6 +428,10 @@ export function buildSchedulesRoute() {
   return "/schedules" as const;
 }
 
+export function buildFleetRoute() {
+  return "/fleet" as const;
+}
+
 export function buildUsageRoute() {
   return "/usage" as const;
 }

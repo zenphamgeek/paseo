@@ -1174,6 +1174,7 @@ export const en = {
       sessions: "History",
       search: "Search",
       schedules: "Schedules",
+      fleet: "Fleet Swarm",
     },
     worktreeSetup: {
       title: "Set up worktree scripts",
@@ -1579,7 +1580,7 @@ export const en = {
     },
   },
   onboarding: {
-    title: "Welcome to Paseo",
+    title: "Welcome to Zencode",
     subtitle: "Connect your computer to get started",
     actions: {
       settings: "Settings",

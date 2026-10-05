@@ -1202,6 +1202,7 @@ export const fr: TranslationResources = {
       sessions: "Historique",
       search: "Rechercher",
       schedules: "Planifications",
+      fleet: "Essaim Fleet",
     },
     worktreeSetup: {
       title: "Configurer les scripts d'arbre de travail",

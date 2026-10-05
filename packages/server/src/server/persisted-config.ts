@@ -348,14 +348,23 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   daemon: {
     listen: "127.0.0.1:6767",
     cors: {
-      allowedOrigins: ["https://app.paseo.sh"],
+      allowedOrigins: [
+        "http://127.0.0.1:6768",
+        "http://127.0.0.1:6767",
+        "http://localhost:6768",
+        "http://localhost:6767",
+        "http://localhost:8081",
+        "http://localhost:3000",
+        "https://app.zencode.sh",
+        "https://app.paseo.sh",
+      ],
     },
     relay: {
       enabled: false,
     },
   },
   app: {
-    baseUrl: "https://app.paseo.sh",
+    baseUrl: process.env.ZENCODE_APP_URL ?? "http://127.0.0.1:6768",
   },
 }) as PersistedConfig;
 

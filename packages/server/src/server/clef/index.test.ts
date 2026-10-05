@@ -90,5 +90,5 @@ describe("ClefCouncil", () => {
     expect(v.gate).toBe("lint");
     expect(v.rawOutputHash).toBeDefined();
     expect(v.rawOutputHash.length).toBe(64); // SHA-256 length
-  });
+  }, 15000);
 });

@@ -7,6 +7,7 @@ import {
   ArrowUp,
   Blocks,
   CalendarClock,
+  Cpu,
   Gauge,
   History,
   Plus,
@@ -44,6 +45,7 @@ const BUILTIN_ICONS: Record<BuiltinSidebarItemId, LucideIcon> = {
   history: History,
   search: Search,
   schedules: CalendarClock,
+  fleet: Cpu,
   usage: Gauge,
 };
 

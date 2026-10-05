@@ -18,6 +18,10 @@ export interface FleetNodeRuntime {
   lastHeartbeat: number;
   consecutiveFailures: number;
   proxyBinding?: string;
+  geminiQuotaPercent?: number;
+  claudeQuotaPercent?: number;
+  geminiResetTime?: string | null;
+  claudeResetTime?: string | null;
 }
 
 export interface FleetRegistryEvents {

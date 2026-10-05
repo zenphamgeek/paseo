@@ -41,11 +41,47 @@ export interface FleetNodeSummary {
   tier: ModelTier;
   state: NodeState;
   accountEmail?: string;
+  caps?: string[];
+  preferredModel?: string;
+  proxyId?: string;
+  geminiQuotaPercent?: number;
+  claudeQuotaPercent?: number;
+  geminiResetTime?: string | null;
+  claudeResetTime?: string | null;
   quota: QuotaSnapshot;
   activeJobs: number;
   requestsServed: number;
   errorCount: number;
   lastHeartbeat: number;
+}
+
+export interface FleetClusterSummary {
+  totalNodes: number;
+  onlineNodes: number;
+  busyNodes: number;
+  ultraNodes: number;
+  proNodes: number;
+  totalTokensCapacity: number;
+  totalTokensUsed: number;
+  overallQuotaPercent: number;
+  clusterHealth: "healthy" | "degraded" | "critical";
+  autonomousEnabled: boolean;
+  activeCouncilMode: string;
+}
+
+export interface FleetJobRecord {
+  id: string;
+  taskId: string;
+  prompt: string;
+  nodeId: string;
+  model: string;
+  status: "queued" | "running" | "completed" | "failed";
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+  tokensUsed?: number;
+  outputPreview?: string;
+  error?: string;
 }
 
 export const RouteRequestSchema = z.object({

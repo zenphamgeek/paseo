@@ -67,7 +67,10 @@ export type RelayRole = "server" | "client";
 export type RelayProtocolVersion = "1" | "2";
 
 export const CURRENT_RELAY_PROTOCOL_VERSION: RelayProtocolVersion = "2";
-export const DEFAULT_RELAY_ENDPOINT = "relay.paseo.sh:443";
+export const DEFAULT_RELAY_ENDPOINT =
+  typeof process !== "undefined" && process?.env?.ZENCODE_RELAY_ENDPOINT
+    ? process.env.ZENCODE_RELAY_ENDPOINT
+    : "relay.zencode.sh:443";
 
 export function normalizeRelayProtocolVersion(
   value: unknown,

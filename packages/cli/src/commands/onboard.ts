@@ -115,12 +115,11 @@ function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: bo
   const daemonLogPath = path.join(paseoHome, "daemon.log");
   const nextStepsLines = [
     pairingUrl
-      ? "1. Open Paseo and scan the QR code above, or paste the pairing link."
-      : "1. Open Paseo and connect to your daemon.",
-    "2. Web app: https://app.paseo.sh",
-    "3. Desktop app: https://github.com/getpaseo/paseo/releases/latest",
-    "4. Docs: https://paseo.sh/docs",
-    `5. Example: paseo run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
+      ? "1. Open Zencode and scan the QR code above, or open the pairing link."
+      : "1. Open Zencode and connect to your daemon.",
+    "2. Web app: http://127.0.0.1:6768 (or https://app.zencode.sh)",
+    "3. Docs: https://zencode.sh/docs",
+    `4. Example: zencode run --home ${JSON.stringify(paseoHome)} "extract fields"`,
   ];
   const quickReferenceLines = [
     "1. paseo --help",

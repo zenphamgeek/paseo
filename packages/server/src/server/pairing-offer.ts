@@ -31,11 +31,13 @@ export async function generateLocalPairingOffer(args: {
     };
   }
 
-  const relayEndpoint = args.relayEndpoint ?? "relay.paseo.sh:443";
+  const relayEndpoint =
+    args.relayEndpoint ?? process.env.ZENCODE_RELAY_ENDPOINT ?? "relay.zencode.sh:443";
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
-  const relayUseTls = args.relayUseTls ?? relayEndpoint === "relay.paseo.sh:443";
+  const relayUseTls =
+    args.relayUseTls ?? (relayEndpoint.endsWith(":443") || relayEndpoint === "relay.paseo.sh:443");
   const relayPublicUseTls = args.relayPublicUseTls ?? relayUseTls;
-  const appBaseUrl = args.appBaseUrl ?? "https://app.paseo.sh";
+  const appBaseUrl = args.appBaseUrl ?? process.env.ZENCODE_APP_URL ?? "http://127.0.0.1:6768";
   const serverId = getOrCreateServerId(args.paseoHome, { logger: args.logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.paseoHome, args.logger);
   const offer = await createConnectionOfferV2({
