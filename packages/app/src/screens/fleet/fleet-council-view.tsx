@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { CheckCircle2, Cpu, HardDrive, ShieldCheck, Zap } from "lucide-react-native";
 import type { FleetCouncilData } from "./types";
 
@@ -12,7 +13,7 @@ export function FleetCouncilView({ _council: _ }: FleetCouncilViewProps) {
       {/* Council Overview Card */}
       <View style={styles.bannerCard}>
         <View style={styles.bannerHeader}>
-          <ShieldCheck size={24} color="#20E9C3" />
+          <ShieldCheck size={24} color={styles.iconAccent.color} />
           <View>
             <Text style={styles.bannerTitle}>
               Clef Council — Verification & Consensus Architecture
@@ -44,7 +45,7 @@ export function FleetCouncilView({ _council: _ }: FleetCouncilViewProps) {
         {/* Tier 1: ULTRA Cloud */}
         <View style={[styles.tierCard, styles.tierCardUltra]}>
           <View style={styles.tierHeader}>
-            <Zap size={18} color="#c084fc" />
+            <Zap size={18} color={styles.iconMerged.color} />
             <Text style={styles.tierTitle}>🔥 ULTRA TIER (Cloud LLM)</Text>
           </View>
           <Text style={styles.tierModelName}>Claude Opus 4.6 / 5.5 High</Text>
@@ -63,7 +64,7 @@ export function FleetCouncilView({ _council: _ }: FleetCouncilViewProps) {
         {/* Tier 2: PRO Cloud */}
         <View style={[styles.tierCard, styles.tierCardPro]}>
           <View style={styles.tierHeader}>
-            <Cpu size={18} color="#38bdf8" />
+            <Cpu size={18} color={styles.iconAccent.color} />
             <Text style={styles.tierTitle}>⚡ PRO TIER (Cloud LLM)</Text>
           </View>
           <Text style={styles.tierModelName}>Gemini 3.8 Flash High / Med</Text>
@@ -82,7 +83,7 @@ export function FleetCouncilView({ _council: _ }: FleetCouncilViewProps) {
         {/* Tier 3: LOCAL LLM */}
         <View style={[styles.tierCard, styles.tierCardLocal]}>
           <View style={styles.tierHeader}>
-            <HardDrive size={18} color="#20E9C3" />
+            <HardDrive size={18} color={styles.iconMuted.color} />
             <Text style={styles.tierTitle}>🛡️ LOCAL TIER (Air-Gapped)</Text>
           </View>
           <Text style={styles.tierModelName}>DeepSeek R1 / Qwen 2.5 (32B)</Text>
@@ -145,7 +146,7 @@ function GateRow({
   return (
     <View style={styles.gateRow}>
       <View style={styles.gateIconBox}>
-        <CheckCircle2 size={16} color="#20E9C3" />
+        <CheckCircle2 size={16} color={styles.iconSuccess.color} />
       </View>
       <View style={styles.gateInfo}>
         <Text style={styles.gateName}>{name}</Text>
@@ -158,16 +159,16 @@ function GateRow({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
     gap: 16,
   },
   bannerCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 18,
     gap: 14,
   },
@@ -177,12 +178,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bannerTitle: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 16,
     fontWeight: "700",
   },
   bannerSubtitle: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
   },
   bannerPolicyRow: {
@@ -190,34 +191,34 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
     borderTopWidth: 1,
-    borderTopColor: "#1e293b",
+    borderTopColor: theme.colors.border,
     paddingTop: 12,
   },
   policyPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
   },
   policyLabel: {
     fontSize: 11,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
   },
   policyVal: {
     fontSize: 11,
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontWeight: "700",
   },
   textMint: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
   },
   textPurple: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
   },
   tiersGrid: {
     flexDirection: "row",
@@ -227,21 +228,21 @@ const styles = StyleSheet.create({
   tierCard: {
     flex: 1,
     minWidth: 260,
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 16,
     gap: 10,
   },
   tierCardUltra: {
-    borderColor: "rgba(168, 85, 247, 0.35)",
+    borderColor: theme.colors.statusMerged,
   },
   tierCardPro: {
-    borderColor: "rgba(56, 189, 248, 0.35)",
+    borderColor: theme.colors.accent,
   },
   tierCardLocal: {
-    borderColor: "rgba(32, 233, 195, 0.35)",
+    borderColor: theme.colors.borderAccent,
   },
   tierHeader: {
     flexDirection: "row",
@@ -249,54 +250,54 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tierTitle: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.5,
   },
   tierModelName: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 15,
     fontWeight: "700",
   },
   tierRole: {
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
     lineHeight: 18,
   },
   tierNodesBox: {
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     padding: 8,
     borderRadius: 6,
     gap: 4,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
   },
   tierNodesLabel: {
     fontSize: 10,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     textTransform: "uppercase",
   },
   tierNodesList: {
     fontSize: 11,
-    color: "#38bdf8",
+    color: theme.colors.accent,
     fontFamily: "monospace",
   },
   gatesCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 18,
     gap: 12,
   },
   gatesHeading: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 15,
     fontWeight: "700",
   },
   gatesSub: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
   },
   gatesList: {
@@ -306,18 +307,18 @@ const styles = StyleSheet.create({
   gateRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
     gap: 12,
   },
   gateIconBox: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(32, 233, 195, 0.1)",
+    backgroundColor: theme.colors.statusSuccessTint,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -325,25 +326,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   gateName: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 13,
     fontWeight: "600",
   },
   gateDesc: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
   },
   gatePassPill: {
-    backgroundColor: "rgba(32, 233, 195, 0.15)",
+    backgroundColor: theme.colors.statusSuccessTint,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#20E9C3",
+    borderColor: theme.colors.accent,
   },
   gatePassText: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
     fontSize: 10,
     fontWeight: "700",
   },
-});
+  iconAccent: {
+    color: theme.colors.accent,
+  },
+  iconMuted: {
+    color: theme.colors.foregroundMuted,
+  },
+  iconMerged: {
+    color: theme.colors.statusMerged,
+  },
+  iconSuccess: {
+    color: theme.colors.statusSuccess,
+  },
+}));

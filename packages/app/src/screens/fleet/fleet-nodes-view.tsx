@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { Cpu, Key, Search, Zap } from "lucide-react-native";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import type { FleetNodeSummary, NodeTierFilter } from "./types";
@@ -43,12 +44,12 @@ export function FleetNodesView({ nodes }: FleetNodesViewProps) {
       {/* Controls Bar: Search + Filter Pills */}
       <View style={styles.controlsBar}>
         <View style={styles.searchBox}>
-          <Search size={14} color="#64748b" style={styles.searchIcon} />
+          <Search size={14} color={styles.iconMuted.color} style={styles.searchIcon} />
           <TextInput
             initialValue={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Filter nodes by ID, email, or model..."
-            placeholderTextColor="#64748b"
+            placeholderTextColor={styles.iconMuted.color}
             style={styles.searchInput}
           />
         </View>
@@ -69,7 +70,10 @@ export function FleetNodesView({ nodes }: FleetNodesViewProps) {
             onPress={handleSetUltra}
             style={[styles.filterPill, tierFilter === "ultra" && styles.filterPillActiveUltra]}
           >
-            <Zap size={12} color={tierFilter === "ultra" ? "#c084fc" : "#a855f7"} />
+            <Zap
+              size={12}
+              color={tierFilter === "ultra" ? styles.iconMerged.color : styles.iconMuted.color}
+            />
             <Text
               style={[
                 styles.filterPillText,
@@ -84,7 +88,10 @@ export function FleetNodesView({ nodes }: FleetNodesViewProps) {
             onPress={handleSetPro}
             style={[styles.filterPill, tierFilter === "pro" && styles.filterPillActivePro]}
           >
-            <Cpu size={12} color={tierFilter === "pro" ? "#38bdf8" : "#0284c7"} />
+            <Cpu
+              size={12}
+              color={tierFilter === "pro" ? styles.iconAccent.color : styles.iconMuted.color}
+            />
             <Text
               style={[
                 styles.filterPillText,
@@ -136,7 +143,7 @@ function NodeCard({ node }: { node: FleetNodeSummary }) {
       {/* Account Tag */}
       {node.accountEmail ? (
         <View style={styles.accountRow}>
-          <Key size={12} color="#64748b" />
+          <Key size={12} color={styles.iconMuted.color} />
           <Text style={styles.accountText} numberOfLines={1}>
             {node.accountEmail}
           </Text>
@@ -185,7 +192,7 @@ function NodeCard({ node }: { node: FleetNodeSummary }) {
       {/* Caps / Model Pills */}
       {node.preferredModel ? (
         <View style={styles.modelRow}>
-          <Cpu size={12} color="#20E9C3" />
+          <Cpu size={12} color={styles.iconAccent.color} />
           <Text style={styles.modelName} numberOfLines={1}>
             {node.preferredModel}
           </Text>
@@ -213,7 +220,7 @@ function NodeCard({ node }: { node: FleetNodeSummary }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
     gap: 16,
@@ -230,10 +237,10 @@ const styles = StyleSheet.create({
     minWidth: 240,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0d1b30",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     height: 36,
   },
@@ -242,7 +249,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 13,
     padding: 0,
   },
@@ -257,37 +264,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 9999,
-    backgroundColor: "#0d1b30",
+    backgroundColor: theme.colors.surface2,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
   },
   filterPillActive: {
-    backgroundColor: "rgba(32, 233, 195, 0.15)",
-    borderColor: "#20E9C3",
+    backgroundColor: theme.colors.statusSuccessTint,
+    borderColor: theme.colors.accent,
   },
   filterPillActiveUltra: {
-    backgroundColor: "rgba(168, 85, 247, 0.15)",
-    borderColor: "#a855f7",
+    backgroundColor: theme.colors.statusMerged + "26",
+    borderColor: theme.colors.statusMerged,
   },
   filterPillActivePro: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
-    borderColor: "#38bdf8",
+    backgroundColor: theme.colors.accent + "26",
+    borderColor: theme.colors.accent,
   },
   filterPillText: {
     fontSize: 12,
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontWeight: "500",
   },
   filterPillTextActive: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
     fontWeight: "600",
   },
   filterPillTextActiveUltra: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
     fontWeight: "600",
   },
   filterPillTextActivePro: {
-    color: "#38bdf8",
+    color: theme.colors.accent,
     fontWeight: "600",
   },
   grid: {
@@ -299,27 +306,27 @@ const styles = StyleSheet.create({
     width: "100%",
     padding: 32,
     borderRadius: 12,
-    backgroundColor: "#0d1b30",
+    backgroundColor: theme.colors.surface1,
     alignItems: "center",
   },
   emptyText: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 14,
   },
   card: {
     flex: 1,
     minWidth: 260,
     maxWidth: 360,
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 14,
     gap: 10,
   },
   cardUltra: {
-    borderColor: "rgba(168, 85, 247, 0.35)",
-    backgroundColor: "#0d162d",
+    borderColor: theme.colors.statusMerged,
+    backgroundColor: theme.colors.surface1,
   },
   cardHeader: {
     flexDirection: "row",
@@ -337,14 +344,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   dotReady: {
-    backgroundColor: "#10b981",
-    boxShadow: "0 0 6px #10b981",
+    backgroundColor: theme.colors.statusDotSuccess,
   },
   dotDegraded: {
-    backgroundColor: "#f59e0b",
+    backgroundColor: theme.colors.statusDotWarning,
   },
   nodeId: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 14,
     fontWeight: "700",
     fontFamily: "monospace",
@@ -355,28 +361,28 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   badgeUltra: {
-    backgroundColor: "rgba(168, 85, 247, 0.2)",
+    backgroundColor: theme.colors.statusMerged + "26",
     borderWidth: 1,
-    borderColor: "rgba(168, 85, 247, 0.5)",
+    borderColor: theme.colors.statusMerged,
   },
   badgePro: {
-    backgroundColor: "rgba(56, 189, 248, 0.2)",
+    backgroundColor: theme.colors.accent + "26",
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.5)",
+    borderColor: theme.colors.accent,
   },
   tierBadgeText: {
     fontSize: 10,
     fontWeight: "700",
   },
   textUltra: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
   },
   textPro: {
-    color: "#38bdf8",
+    color: theme.colors.accent,
   },
   nodeKind: {
     fontSize: 11,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     textTransform: "uppercase",
   },
   accountRow: {
@@ -385,17 +391,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   accountText: {
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
     fontFamily: "monospace",
   },
   quotaSection: {
     gap: 8,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     padding: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
   },
   quotaBarContainer: {
     gap: 4,
@@ -407,18 +413,18 @@ const styles = StyleSheet.create({
   },
   quotaLabel: {
     fontSize: 10,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     textTransform: "uppercase",
   },
   quotaValue: {
     fontSize: 11,
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontWeight: "600",
     fontFamily: "monospace",
   },
   progressBarBg: {
     height: 4,
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.colors.surface3,
     borderRadius: 2,
     overflow: "hidden",
   },
@@ -427,16 +433,16 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   barHealthy: {
-    backgroundColor: "#20E9C3",
+    backgroundColor: theme.colors.accent,
   },
   barWarning: {
-    backgroundColor: "#f59e0b",
+    backgroundColor: theme.colors.statusWarning,
   },
   barCritical: {
-    backgroundColor: "#ef4444",
+    backgroundColor: theme.colors.statusDanger,
   },
   barPurple: {
-    backgroundColor: "#a855f7",
+    backgroundColor: theme.colors.statusMerged,
   },
   modelRow: {
     flexDirection: "row",
@@ -444,7 +450,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   modelName: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
     fontSize: 11,
     fontWeight: "500",
   },
@@ -452,7 +458,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    borderTopColor: "#1e293b",
+    borderTopColor: theme.colors.border,
     paddingTop: 8,
   },
   metricItem: {
@@ -460,15 +466,24 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontSize: 9,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     textTransform: "uppercase",
   },
   metricValue: {
     fontSize: 12,
-    color: "#e2e8f0",
+    color: theme.colors.foreground,
     fontWeight: "600",
   },
   errorText: {
-    color: "#ef4444",
+    color: theme.colors.statusDanger,
   },
-});
+  iconMuted: {
+    color: theme.colors.foregroundMuted,
+  },
+  iconAccent: {
+    color: theme.colors.accent,
+  },
+  iconMerged: {
+    color: theme.colors.statusMerged,
+  },
+}));

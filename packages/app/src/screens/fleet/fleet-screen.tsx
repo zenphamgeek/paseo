@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { useIsFocused } from "@react-navigation/native";
 import { Bot, Cpu, ListFilter, RefreshCw, ShieldCheck, Terminal, Zap } from "lucide-react-native";
 import { PageLayout } from "@/components/page-layout";
@@ -33,7 +34,7 @@ function FleetHeaderActions({ summary, isRefreshing, onRefresh }: FleetHeaderAct
         style={styles.refreshBtn}
         testID="fleet-refresh-quotas-btn"
       >
-        <RefreshCw size={13} color="#94a3b8" />
+        <RefreshCw size={13} color={styles.iconMuted.color} />
         <Text style={styles.refreshBtnText}>{isRefreshing ? "Syncing..." : "Refresh"}</Text>
       </Pressable>
     </View>
@@ -51,7 +52,7 @@ function FleetKpiGrid({ summary, nodesCount }: FleetKpiGridProps) {
       <View style={styles.kpiCard}>
         <View style={styles.kpiHeader}>
           <Text style={styles.kpiLabel}>Fleet Nodes</Text>
-          <Cpu size={16} color="#38bdf8" />
+          <Cpu size={16} color={styles.iconAccent.color} />
         </View>
         <Text style={styles.kpiValue}>{nodesCount || summary.totalNodes}</Text>
         <Text style={styles.kpiSub}>
@@ -62,7 +63,7 @@ function FleetKpiGrid({ summary, nodesCount }: FleetKpiGridProps) {
       <View style={styles.kpiCard}>
         <View style={styles.kpiHeader}>
           <Text style={styles.kpiLabel}>Cluster Quota</Text>
-          <Zap size={16} color="#20E9C3" />
+          <Zap size={16} color={styles.iconAccent.color} />
         </View>
         <Text style={[styles.kpiValue, styles.textMint]}>{summary.overallQuotaPercent}%</Text>
         <Text style={styles.kpiSub}>Dual 5h & Weekly Windows</Text>
@@ -71,7 +72,7 @@ function FleetKpiGrid({ summary, nodesCount }: FleetKpiGridProps) {
       <View style={styles.kpiCard}>
         <View style={styles.kpiHeader}>
           <Text style={styles.kpiLabel}>Council Gates</Text>
-          <ShieldCheck size={16} color="#c084fc" />
+          <ShieldCheck size={16} color={styles.iconMerged.color} />
         </View>
         <Text style={[styles.kpiValue, styles.textPurple]}>100% PASS</Text>
         <Text style={styles.kpiSub}>Hybrid (Deterministic + Semantic)</Text>
@@ -80,7 +81,7 @@ function FleetKpiGrid({ summary, nodesCount }: FleetKpiGridProps) {
       <View style={styles.kpiCard}>
         <View style={styles.kpiHeader}>
           <Text style={styles.kpiLabel}>9Router Egress</Text>
-          <Bot size={16} color="#38bdf8" />
+          <Bot size={16} color={styles.iconMuted.color} />
         </View>
         <Text style={styles.kpiValue}>ACTIVE</Text>
         <Text style={styles.kpiSub}>Stealth Zero-Outbound Telemetry</Text>
@@ -116,7 +117,10 @@ function FleetTabsBar({
         onPress={onSetNodes}
         style={[styles.tabBtn, activeTab === "nodes" && styles.tabBtnActive]}
       >
-        <Cpu size={14} color={activeTab === "nodes" ? "#20E9C3" : "#64748b"} />
+        <Cpu
+          size={14}
+          color={activeTab === "nodes" ? styles.iconAccent.color : styles.iconMuted.color}
+        />
         <Text style={[styles.tabText, activeTab === "nodes" && styles.tabTextActive]}>
           Nodes & Quotas ({nodesCount || 15})
         </Text>
@@ -126,7 +130,10 @@ function FleetTabsBar({
         onPress={onSetAutonomous}
         style={[styles.tabBtn, activeTab === "autonomous" && styles.tabBtnActive]}
       >
-        <Bot size={14} color={activeTab === "autonomous" ? "#20E9C3" : "#64748b"} />
+        <Bot
+          size={14}
+          color={activeTab === "autonomous" ? styles.iconAccent.color : styles.iconMuted.color}
+        />
         <Text style={[styles.tabText, activeTab === "autonomous" && styles.tabTextActive]}>
           Autonomous Swarm
         </Text>
@@ -136,7 +143,10 @@ function FleetTabsBar({
         onPress={onSetCouncil}
         style={[styles.tabBtn, activeTab === "council" && styles.tabBtnActive]}
       >
-        <ShieldCheck size={14} color={activeTab === "council" ? "#20E9C3" : "#64748b"} />
+        <ShieldCheck
+          size={14}
+          color={activeTab === "council" ? styles.iconAccent.color : styles.iconMuted.color}
+        />
         <Text style={[styles.tabText, activeTab === "council" && styles.tabTextActive]}>
           Clef Council Matrix
         </Text>
@@ -146,7 +156,10 @@ function FleetTabsBar({
         onPress={onSetRunner}
         style={[styles.tabBtn, activeTab === "runner" && styles.tabBtnActive]}
       >
-        <Terminal size={14} color={activeTab === "runner" ? "#20E9C3" : "#64748b"} />
+        <Terminal
+          size={14}
+          color={activeTab === "runner" ? styles.iconAccent.color : styles.iconMuted.color}
+        />
         <Text style={[styles.tabText, activeTab === "runner" && styles.tabTextActive]}>
           Swarm Prompt Runner
         </Text>
@@ -156,7 +169,10 @@ function FleetTabsBar({
         onPress={onSetJobs}
         style={[styles.tabBtn, activeTab === "jobs" && styles.tabBtnActive]}
       >
-        <ListFilter size={14} color={activeTab === "jobs" ? "#20E9C3" : "#64748b"} />
+        <ListFilter
+          size={14}
+          color={activeTab === "jobs" ? styles.iconAccent.color : styles.iconMuted.color}
+        />
         <Text style={[styles.tabText, activeTab === "jobs" && styles.tabTextActive]}>
           History ({jobsCount})
         </Text>
@@ -244,7 +260,7 @@ export function FleetScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
   },
@@ -262,9 +278,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(32, 233, 195, 0.1)",
+    backgroundColor: theme.colors.statusSuccessTint,
     borderWidth: 1,
-    borderColor: "rgba(32, 233, 195, 0.3)",
+    borderColor: theme.colors.borderAccent,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 9999,
@@ -273,11 +289,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#20E9C3",
-    boxShadow: "0 0 6px #20E9C3",
+    backgroundColor: theme.colors.statusDotSuccess,
   },
   clusterPillText: {
-    color: "#20E9C3",
+    color: theme.colors.statusSuccess,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -286,15 +301,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#0d1b30",
+    backgroundColor: theme.colors.surface2,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
   },
   refreshBtnText: {
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontSize: 11,
   },
   kpiGrid: {
@@ -305,10 +320,10 @@ const styles = StyleSheet.create({
   kpiCard: {
     flex: 1,
     minWidth: 180,
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 14,
     gap: 4,
   },
@@ -318,33 +333,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   kpiLabel: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   kpiValue: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 22,
     fontWeight: "800",
     fontFamily: "monospace",
   },
   kpiSub: {
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
   },
   textMint: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
   },
   textPurple: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
   },
   tabsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
+    borderBottomColor: theme.colors.border,
     gap: 4,
   },
   tabBtn: {
@@ -357,17 +372,26 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabBtnActive: {
-    borderBottomColor: "#20E9C3",
+    borderBottomColor: theme.colors.accent,
   },
   tabText: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 13,
     fontWeight: "600",
   },
   tabTextActive: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
   },
   tabContentArea: {
     width: "100%",
   },
-});
+  iconAccent: {
+    color: theme.colors.accent,
+  },
+  iconMuted: {
+    color: theme.colors.foregroundMuted,
+  },
+  iconMerged: {
+    color: theme.colors.statusMerged,
+  },
+}));

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { Check, Copy, Cpu, Play, Terminal, Zap } from "lucide-react-native";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import type { DispatchTaskPayload, FleetNodeSummary } from "./types";
@@ -79,7 +80,7 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
       {/* Dispatch Control Box */}
       <View style={styles.formCard}>
         <View style={styles.headerRow}>
-          <Terminal size={20} color="#20E9C3" />
+          <Terminal size={20} color={styles.iconAccent.color} />
           <View>
             <Text style={styles.title}>Fleet Swarm Prompt Runner</Text>
             <Text style={styles.subtitle}>
@@ -127,7 +128,12 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
                 onPress={handleSelectTierUltra}
                 style={[styles.tierPill, selectedTier === "ultra" && styles.tierPillActiveUltra]}
               >
-                <Zap size={12} color={selectedTier === "ultra" ? "#c084fc" : "#64748b"} />
+                <Zap
+                  size={12}
+                  color={
+                    selectedTier === "ultra" ? styles.iconMerged.color : styles.iconMuted.color
+                  }
+                />
                 <Text
                   style={[
                     styles.tierPillText,
@@ -142,7 +148,10 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
                 onPress={handleSelectTierPro}
                 style={[styles.tierPill, selectedTier === "pro" && styles.tierPillActivePro]}
               >
-                <Cpu size={12} color={selectedTier === "pro" ? "#38bdf8" : "#64748b"} />
+                <Cpu
+                  size={12}
+                  color={selectedTier === "pro" ? styles.iconAccent.color : styles.iconMuted.color}
+                />
                 <Text
                   style={[
                     styles.tierPillText,
@@ -164,7 +173,7 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
             initialValue={prompt}
             onChangeText={setPrompt}
             placeholder="Enter instructions, architectural requirements, or code refactor request..."
-            placeholderTextColor="#64748b"
+            placeholderTextColor={styles.iconMuted.color}
             style={styles.textArea}
           />
         </View>
@@ -176,7 +185,7 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
             disabled={isExecuting || !prompt.trim()}
             style={[styles.runBtn, (!prompt.trim() || isExecuting) && styles.runBtnDisabled]}
           >
-            <Play size={14} color="#071225" />
+            <Play size={14} color={styles.iconSurface0.color} />
             <Text style={styles.runBtnText}>
               {isExecuting ? "Executing across Swarm..." : "Dispatch Swarm Task"}
             </Text>
@@ -196,7 +205,11 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
             </View>
 
             <Pressable onPress={handleCopy} style={styles.copyBtn}>
-              {copied ? <Check size={14} color="#20E9C3" /> : <Copy size={14} color="#94a3b8" />}
+              {copied ? (
+                <Check size={14} color={styles.iconSuccess.color} />
+              ) : (
+                <Copy size={14} color={styles.iconMuted.color} />
+              )}
               <Text style={styles.copyBtnText}>{copied ? "Copied" : "Copy Output"}</Text>
             </Pressable>
           </View>
@@ -210,16 +223,16 @@ export function FleetRunnerView({ nodes, onDispatchTask }: FleetRunnerViewProps)
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
     gap: 16,
   },
   formCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 18,
     gap: 16,
   },
@@ -229,18 +242,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 16,
     fontWeight: "700",
   },
   subtitle: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
   },
   optionsRow: {
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: "#1e293b",
+    borderTopColor: theme.colors.border,
     paddingTop: 12,
   },
   optionCol: {
@@ -248,7 +261,7 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     fontSize: 10,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontWeight: "700",
     letterSpacing: 0.5,
   },
@@ -261,21 +274,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
   },
   nodePillActive: {
-    backgroundColor: "rgba(32, 233, 195, 0.15)",
-    borderColor: "#20E9C3",
+    backgroundColor: theme.colors.statusSuccessTint,
+    borderColor: theme.colors.accent,
   },
   nodePillText: {
     fontSize: 11,
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontFamily: "monospace",
   },
   nodePillTextActive: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
     fontWeight: "700",
   },
   tierPill: {
@@ -285,39 +298,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
   },
   tierPillActiveUltra: {
-    backgroundColor: "rgba(168, 85, 247, 0.15)",
-    borderColor: "#a855f7",
+    backgroundColor: theme.colors.statusMerged + "26",
+    borderColor: theme.colors.statusMerged,
   },
   tierPillActivePro: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
-    borderColor: "#38bdf8",
+    backgroundColor: theme.colors.accent + "26",
+    borderColor: theme.colors.accent,
   },
   tierPillText: {
     fontSize: 11,
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
   },
   tierPillTextActiveUltra: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
     fontWeight: "700",
   },
   tierPillTextActivePro: {
-    color: "#38bdf8",
+    color: theme.colors.accent,
     fontWeight: "700",
   },
   inputContainer: {
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 10,
   },
   textArea: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 13,
     minHeight: 100,
     textAlignVertical: "top",
@@ -331,7 +344,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#20E9C3",
+    backgroundColor: theme.colors.accent,
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 8,
@@ -340,19 +353,19 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   runBtnText: {
-    color: "#071225",
+    color: theme.colors.surface0,
     fontSize: 13,
     fontWeight: "700",
   },
   errorText: {
-    color: "#ef4444",
+    color: theme.colors.destructive,
     fontSize: 12,
   },
   outputCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 16,
     gap: 12,
   },
@@ -370,11 +383,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#20E9C3",
-    boxShadow: "0 0 6px #20E9C3",
+    backgroundColor: theme.colors.accent,
+    boxShadow: "0 0 6px " + theme.colors.accent,
   },
   outputTitle: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -385,26 +398,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
   },
   copyBtnText: {
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
   },
   outputBox: {
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface0,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
     padding: 12,
     maxHeight: 350,
   },
   outputText: {
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontSize: 12,
     fontFamily: "monospace",
     lineHeight: 18,
   },
-});
+  iconAccent: {
+    color: theme.colors.accent,
+  },
+  iconMuted: {
+    color: theme.colors.foregroundMuted,
+  },
+  iconMerged: {
+    color: theme.colors.statusMerged,
+  },
+  iconSuccess: {
+    color: theme.colors.statusSuccess,
+  },
+  iconSurface0: {
+    color: theme.colors.surface0,
+  },
+}));

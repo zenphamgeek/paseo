@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { Activity, Bot, CheckCircle2, Play } from "lucide-react-native";
 import {
   EditingTextInput as TextInput,
@@ -72,7 +73,10 @@ export function FleetAutonomousView({ summary, onToggleAutonomous }: FleetAutono
       <View style={styles.hudCard}>
         <View style={styles.hudHeader}>
           <View style={styles.hudIdentity}>
-            <Bot size={22} color={summary.autonomousEnabled ? "#20E9C3" : "#64748b"} />
+            <Bot
+              size={22}
+              color={summary.autonomousEnabled ? styles.iconAccent.color : styles.iconMuted.color}
+            />
             <View>
               <Text style={styles.hudTitle}>Autonomous Swarm Orchestrator</Text>
               <Text style={styles.hudSubtitle}>
@@ -139,7 +143,7 @@ export function FleetAutonomousView({ summary, onToggleAutonomous }: FleetAutono
             initialValue={goalInput}
             onChangeText={setGoalInput}
             placeholder="e.g., Audit security gates and optimize 9Router proxy latency..."
-            placeholderTextColor="#64748b"
+            placeholderTextColor={styles.iconMuted.color}
             style={styles.goalTextInput}
           />
           <Pressable
@@ -150,7 +154,7 @@ export function FleetAutonomousView({ summary, onToggleAutonomous }: FleetAutono
               (!goalInput.trim() || isStartingGoal) && styles.launchBtnDisabled,
             ]}
           >
-            <Play size={14} color="#071225" />
+            <Play size={14} color={styles.iconSurface0.color} />
             <Text style={styles.launchBtnText}>
               {isStartingGoal ? "Decomposing..." : "Launch Swarm"}
             </Text>
@@ -232,9 +236,9 @@ function DagStep({
       <View style={styles.stepIndicatorCol}>
         <View style={[styles.stepCircle, isDone ? styles.circleDone : styles.circlePending]}>
           {isDone ? (
-            <CheckCircle2 size={14} color="#20E9C3" />
+            <CheckCircle2 size={14} color={styles.iconAccent.color} />
           ) : (
-            <Activity size={14} color="#38bdf8" />
+            <Activity size={14} color={styles.iconMuted.color} />
           )}
         </View>
         <View style={styles.stepConnector} />
@@ -251,16 +255,16 @@ function DagStep({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
     gap: 16,
   },
   hudCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 18,
     gap: 16,
   },
@@ -277,12 +281,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hudTitle: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 16,
     fontWeight: "700",
   },
   hudSubtitle: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
   },
   toggleBtn: {
@@ -295,12 +299,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   toggleBtnActive: {
-    backgroundColor: "rgba(32, 233, 195, 0.12)",
-    borderColor: "#20E9C3",
+    backgroundColor: theme.colors.statusSuccessTint,
+    borderColor: theme.colors.accent,
   },
   toggleBtnInactive: {
-    backgroundColor: "rgba(100, 116, 139, 0.12)",
-    borderColor: "#64748b",
+    backgroundColor: theme.colors.surface2,
+    borderColor: theme.colors.border,
   },
   toggleDot: {
     width: 8,
@@ -308,11 +312,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   dotGreen: {
-    backgroundColor: "#20E9C3",
-    boxShadow: "0 0 6px #20E9C3",
+    backgroundColor: theme.colors.statusDotSuccess,
   },
   dotGray: {
-    backgroundColor: "#64748b",
+    backgroundColor: theme.colors.foregroundMuted,
   },
   toggleBtnText: {
     fontSize: 11,
@@ -320,58 +323,58 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   textMint: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
   },
   textPurple: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
   },
   textMuted: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
   },
   hudMetricsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: "#1e293b",
+    borderTopColor: theme.colors.border,
     paddingTop: 14,
   },
   hudMetricBox: {
     flex: 1,
     minWidth: 140,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
   },
   metricLabel: {
     fontSize: 10,
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     textTransform: "uppercase",
   },
   metricVal: {
     fontSize: 13,
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontWeight: "700",
     marginTop: 2,
     fontFamily: "monospace",
   },
   goalCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 18,
     gap: 10,
   },
   sectionHeading: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 15,
     fontWeight: "700",
   },
   sectionDesc: {
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
   },
   goalInputRow: {
@@ -383,20 +386,20 @@ const styles = StyleSheet.create({
   goalTextInput: {
     flex: 1,
     minWidth: 260,
-    backgroundColor: "#071225",
+    backgroundColor: theme.colors.surface2,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 13,
   },
   launchBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#20E9C3",
+    backgroundColor: theme.colors.accent,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -405,15 +408,15 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   launchBtnText: {
-    color: "#071225",
+    color: theme.colors.accentForeground ?? theme.colors.surface0,
     fontWeight: "700",
     fontSize: 13,
   },
   dagCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     padding: 18,
     gap: 14,
   },
@@ -425,12 +428,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dagGoalLabel: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
     fontFamily: "monospace",
   },
   dagGoalIntent: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 14,
     fontWeight: "600",
     marginTop: 2,
@@ -441,17 +444,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   badgeSuccess: {
-    backgroundColor: "rgba(32, 233, 195, 0.15)",
+    backgroundColor: theme.colors.statusSuccessTint,
     borderWidth: 1,
-    borderColor: "#20E9C3",
+    borderColor: theme.colors.accent,
   },
   badgeProgress: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    backgroundColor: theme.colors.surface2,
     borderWidth: 1,
-    borderColor: "#38bdf8",
+    borderColor: theme.colors.border,
   },
   goalStatusText: {
-    color: "#20E9C3",
+    color: theme.colors.accent,
     fontSize: 10,
     fontWeight: "700",
   },
@@ -475,15 +478,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   circleDone: {
-    backgroundColor: "rgba(32, 233, 195, 0.15)",
+    backgroundColor: theme.colors.statusSuccessTint,
   },
   circlePending: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    backgroundColor: theme.colors.surface2,
   },
   stepConnector: {
     width: 2,
     flex: 1,
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.colors.border,
     marginVertical: 2,
   },
   stepContent: {
@@ -497,31 +500,40 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   stepId: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 10,
     fontFamily: "monospace",
   },
   stepNodeTag: {
-    color: "#38bdf8",
+    color: theme.colors.accent,
     fontSize: 10,
-    backgroundColor: "rgba(56, 189, 248, 0.1)",
+    backgroundColor: theme.colors.surface2,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
     fontFamily: "monospace",
   },
   stepModelTag: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
     fontSize: 10,
-    backgroundColor: "rgba(168, 85, 247, 0.1)",
+    backgroundColor: theme.colors.surface2,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
   },
   stepTitle: {
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontSize: 13,
     fontWeight: "500",
     marginTop: 2,
   },
-});
+  iconAccent: {
+    color: theme.colors.accent,
+  },
+  iconMuted: {
+    color: theme.colors.foregroundMuted,
+  },
+  iconSurface0: {
+    color: theme.colors.surface0,
+  },
+}));

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import {
   CheckCircle2,
   ChevronDown,
@@ -33,9 +34,9 @@ function JobCardItem({ job, isExpanded, onToggle }: JobCardItemProps) {
       <Pressable onPress={handlePress} style={styles.jobSummaryRow}>
         <View style={styles.jobStatusCol}>
           {isSuccess ? (
-            <CheckCircle2 size={16} color="#20E9C3" />
+            <CheckCircle2 size={16} color={styles.iconAccent.color} />
           ) : (
-            <XCircle size={16} color="#ef4444" />
+            <XCircle size={16} color={styles.iconDanger.color} />
           )}
         </View>
 
@@ -43,7 +44,7 @@ function JobCardItem({ job, isExpanded, onToggle }: JobCardItemProps) {
           <View style={styles.jobMetaRow}>
             <Text style={styles.jobId}>{job.id}</Text>
             <View style={styles.nodeTag}>
-              <Cpu size={10} color="#38bdf8" />
+              <Cpu size={10} color={styles.iconAccent.color} />
               <Text style={styles.nodeTagText}>{job.nodeId}</Text>
             </View>
             <Text style={styles.modelTag}>{job.model}</Text>
@@ -55,7 +56,7 @@ function JobCardItem({ job, isExpanded, onToggle }: JobCardItemProps) {
 
         <View style={styles.jobStatsCol}>
           <View style={styles.durationRow}>
-            <Clock size={11} color="#64748b" />
+            <Clock size={11} color={styles.iconMuted.color} />
             <Text style={styles.durationText}>
               {job.durationMs !== undefined ? `${(job.durationMs / 1000).toFixed(1)}s` : "running"}
             </Text>
@@ -65,9 +66,9 @@ function JobCardItem({ job, isExpanded, onToggle }: JobCardItemProps) {
 
         <View style={styles.expandIconCol}>
           {isExpanded ? (
-            <ChevronDown size={16} color="#64748b" />
+            <ChevronDown size={16} color={styles.iconMuted.color} />
           ) : (
-            <ChevronRight size={16} color="#64748b" />
+            <ChevronRight size={16} color={styles.iconMuted.color} />
           )}
         </View>
       </Pressable>
@@ -95,7 +96,7 @@ export function FleetJobsView({ jobs }: FleetJobsViewProps) {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <ListFilter size={18} color="#20E9C3" />
+          <ListFilter size={18} color={styles.iconAccent.color} />
           <Text style={styles.title}>Execution History & Swarm Flow ({jobs.length})</Text>
         </View>
       </View>
@@ -123,7 +124,7 @@ export function FleetJobsView({ jobs }: FleetJobsViewProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
     gap: 12,
@@ -139,26 +140,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 15,
     fontWeight: "700",
   },
   emptyCard: {
     padding: 36,
     borderRadius: 12,
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     alignItems: "center",
     gap: 6,
   },
   emptyTitle: {
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontSize: 14,
     fontWeight: "600",
   },
   emptySub: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
     textAlign: "center",
     maxWidth: 400,
@@ -167,10 +168,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   jobCard: {
-    backgroundColor: "#0c182c",
+    backgroundColor: theme.colors.surface1,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.border,
     overflow: "hidden",
   },
   jobSummaryRow: {
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   jobId: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
     fontFamily: "monospace",
   },
@@ -202,22 +203,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(56, 189, 248, 0.1)",
+    backgroundColor: theme.colors.accent + "1a",
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
   },
   nodeTagText: {
-    color: "#38bdf8",
+    color: theme.colors.accent,
     fontSize: 10,
     fontFamily: "monospace",
   },
   modelTag: {
-    color: "#c084fc",
+    color: theme.colors.statusMerged,
     fontSize: 10,
   },
   jobPrompt: {
-    color: "#f8fafc",
+    color: theme.colors.foreground,
     fontSize: 12,
   },
   jobStatsCol: {
@@ -230,12 +231,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   durationText: {
-    color: "#94a3b8",
+    color: theme.colors.foregroundMuted,
     fontSize: 11,
     fontFamily: "monospace",
   },
   tokensText: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 10,
   },
   expandIconCol: {
@@ -244,28 +245,37 @@ const styles = StyleSheet.create({
   },
   expandedContent: {
     borderTopWidth: 1,
-    borderTopColor: "#1e293b",
-    backgroundColor: "#071225",
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surface2,
     padding: 12,
     gap: 6,
   },
   outputHeading: {
-    color: "#64748b",
+    color: theme.colors.foregroundMuted,
     fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
   },
   outputBox: {
-    backgroundColor: "#0a1424",
+    backgroundColor: theme.colors.surface0,
     padding: 10,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: theme.colors.border,
   },
   outputText: {
-    color: "#cbd5e1",
+    color: theme.colors.foreground,
     fontSize: 11,
     fontFamily: "monospace",
     lineHeight: 16,
   },
-});
+  iconAccent: {
+    color: theme.colors.accent,
+  },
+  iconMuted: {
+    color: theme.colors.foregroundMuted,
+  },
+  iconDanger: {
+    color: theme.colors.destructive,
+  },
+}));
