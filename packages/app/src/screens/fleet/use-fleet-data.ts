@@ -5,6 +5,7 @@ import type {
   FleetCouncilData,
   FleetJobRecord,
   FleetNodeSummary,
+  SwarmTelemetrySnapshot,
 } from "./types";
 
 function getDaemonApiBaseUrl(): string {
@@ -32,11 +33,23 @@ const DEFAULT_SUMMARY: FleetClusterSummary = {
   activeCouncilMode: "hybrid",
 };
 
+async function extractJsonIfOk<T>(result: PromiseSettledResult<Response>): Promise<T | null> {
+  if (result.status === "fulfilled" && result.value.ok) {
+    try {
+      return (await result.value.json()) as T;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function useFleetData() {
   const [nodes, setNodes] = useState<FleetNodeSummary[]>([]);
   const [summary, setSummary] = useState<FleetClusterSummary>(DEFAULT_SUMMARY);
   const [jobs, setJobs] = useState<FleetJobRecord[]>([]);
   const [council, setCouncil] = useState<FleetCouncilData | null>(null);
+  const [telemetry, setTelemetry] = useState<SwarmTelemetrySnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
@@ -48,34 +61,29 @@ export function useFleetData() {
     const baseUrl = getDaemonApiBaseUrl();
 
     try {
-      const [nodesRes, summaryRes, jobsRes, councilRes] = await Promise.allSettled([
+      const settled = await Promise.allSettled([
         fetch(`${baseUrl}/api/fleet/nodes`),
         fetch(`${baseUrl}/api/fleet/summary`),
         fetch(`${baseUrl}/api/fleet/jobs`),
         fetch(`${baseUrl}/api/fleet/council`),
+        fetch(`${baseUrl}/api/fleet/telemetry`),
       ]);
 
       if (!mountedRef.current) return;
 
-      if (nodesRes.status === "fulfilled" && nodesRes.value.ok) {
-        const data = await nodesRes.value.json();
-        if (Array.isArray(data.nodes)) setNodes(data.nodes);
-      }
+      const [nodesData, summaryData, jobsData, councilData, telemetryData] = await Promise.all([
+        extractJsonIfOk<{ nodes?: FleetNodeSummary[] }>(settled[0]),
+        extractJsonIfOk<{ summary?: FleetClusterSummary }>(settled[1]),
+        extractJsonIfOk<{ jobs?: FleetJobRecord[] }>(settled[2]),
+        extractJsonIfOk<FleetCouncilData>(settled[3]),
+        extractJsonIfOk<SwarmTelemetrySnapshot>(settled[4]),
+      ]);
 
-      if (summaryRes.status === "fulfilled" && summaryRes.value.ok) {
-        const data = await summaryRes.value.json();
-        if (data.summary) setSummary(data.summary);
-      }
-
-      if (jobsRes.status === "fulfilled" && jobsRes.value.ok) {
-        const data = await jobsRes.value.json();
-        if (Array.isArray(data.jobs)) setJobs(data.jobs);
-      }
-
-      if (councilRes.status === "fulfilled" && councilRes.value.ok) {
-        const data = await councilRes.value.json();
-        setCouncil(data);
-      }
+      if (nodesData?.nodes) setNodes(nodesData.nodes);
+      if (summaryData?.summary) setSummary(summaryData.summary);
+      if (jobsData?.jobs) setJobs(jobsData.jobs);
+      if (councilData) setCouncil(councilData);
+      if (telemetryData) setTelemetry(telemetryData);
 
       setLastUpdated(Date.now());
       setError(null);
@@ -155,6 +163,7 @@ export function useFleetData() {
     summary,
     jobs,
     council,
+    telemetry,
     isLoading,
     isRefreshing,
     lastUpdated,

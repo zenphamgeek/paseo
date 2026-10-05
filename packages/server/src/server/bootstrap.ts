@@ -13,9 +13,11 @@ import { z } from "zod";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
 import { FleetRegistry } from "./fleet/registry.js";
 import { NineRouter } from "./router/index.js";
-import { EgressManager } from "./egress/index.js";
+import { EgressManager, getEgressProxyManager } from "./egress/index.js";
 import { ClefCouncil } from "./clef/index.js";
 import { GoalEngine } from "./goal/index.js";
+import { getTelemetryHub, getTelegramAlerter } from "./telemetry/index.js";
+import { getHermesManager } from "./hermes/index.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -749,6 +751,59 @@ function mountZencodeFleetAndGoalEndpoints(
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
     }
+  });
+
+  // Telemetry Health Spine & Multi-Subsystem Inspector
+  app.get("/api/fleet/telemetry", (_req, res) => {
+    void (async () => {
+      try {
+        const snapshot = await getTelemetryHub().getTelemetrySnapshot();
+        res.json(snapshot);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // Egress Proxy Pool (16 slots 20128..20143)
+  app.get("/api/fleet/egress", (_req, res) => {
+    void (async () => {
+      try {
+        const pool = await getEgressProxyManager().getPoolStatus();
+        res.json(pool);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // Native Hermes Agent & Database Inspector
+  app.get("/api/fleet/hermes", (_req, res) => {
+    void (async () => {
+      try {
+        const health = await getHermesManager().getHealthStatus();
+        res.json(health);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // Telegram Resource Shortage Alerter Test Trigger
+  app.post("/api/fleet/telegram/test", (req, res) => {
+    void (async () => {
+      try {
+        const { message } = req.body || {};
+        const result = await getTelegramAlerter().sendTestAlert(message);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
   });
 
   app.post("/api/goal/start", (req, res) => {

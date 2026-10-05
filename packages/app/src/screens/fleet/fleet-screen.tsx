@@ -2,13 +2,23 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsFocused } from "@react-navigation/native";
-import { Bot, Cpu, ListFilter, RefreshCw, ShieldCheck, Terminal, Zap } from "lucide-react-native";
+import {
+  Activity,
+  Bot,
+  Cpu,
+  ListFilter,
+  RefreshCw,
+  ShieldCheck,
+  Terminal,
+  Zap,
+} from "lucide-react-native";
 import { PageLayout } from "@/components/page-layout";
 import { FleetAutonomousView } from "./fleet-autonomous-view";
 import { FleetCouncilView } from "./fleet-council-view";
 import { FleetJobsView } from "./fleet-jobs-view";
 import { FleetNodesView } from "./fleet-nodes-view";
 import { FleetRunnerView } from "./fleet-runner-view";
+import { FleetTelemetryView } from "./fleet-telemetry-view";
 import type { FleetActiveTab, FleetClusterSummary } from "./types";
 import { useFleetData } from "./use-fleet-data";
 
@@ -97,6 +107,7 @@ interface FleetTabsBarProps {
   onSetCouncil: () => void;
   onSetRunner: () => void;
   onSetJobs: () => void;
+  onSetTelemetry: () => void;
   nodesCount: number;
   jobsCount: number;
 }
@@ -108,6 +119,7 @@ function FleetTabsBar({
   onSetCouncil,
   onSetRunner,
   onSetJobs,
+  onSetTelemetry,
   nodesCount,
   jobsCount,
 }: FleetTabsBarProps) {
@@ -153,6 +165,19 @@ function FleetTabsBar({
       </Pressable>
 
       <Pressable
+        onPress={onSetTelemetry}
+        style={[styles.tabBtn, activeTab === "telemetry" && styles.tabBtnActive]}
+      >
+        <Activity
+          size={14}
+          color={activeTab === "telemetry" ? styles.iconAccent.color : styles.iconMuted.color}
+        />
+        <Text style={[styles.tabText, activeTab === "telemetry" && styles.tabTextActive]}>
+          Telemetry & Health
+        </Text>
+      </Pressable>
+
+      <Pressable
         onPress={onSetRunner}
         style={[styles.tabBtn, activeTab === "runner" && styles.tabBtnActive]}
       >
@@ -190,6 +215,8 @@ export function FleetScreen() {
     summary,
     jobs,
     council,
+    telemetry,
+    isLoading,
     isRefreshing,
     refreshQuotas,
     dispatchTask,
@@ -201,6 +228,7 @@ export function FleetScreen() {
   const handleSetCouncil = useCallback(() => setActiveTab("council"), []);
   const handleSetRunner = useCallback(() => setActiveTab("runner"), []);
   const handleSetJobs = useCallback(() => setActiveTab("jobs"), []);
+  const handleSetTelemetry = useCallback(() => setActiveTab("telemetry"), []);
 
   const headerActions = useMemo(
     () => (
@@ -229,6 +257,7 @@ export function FleetScreen() {
           onSetCouncil={handleSetCouncil}
           onSetRunner={handleSetRunner}
           onSetJobs={handleSetJobs}
+          onSetTelemetry={handleSetTelemetry}
           nodesCount={nodes.length}
           jobsCount={jobs.length}
         />
@@ -248,6 +277,14 @@ export function FleetScreen() {
           ) : null}
 
           {activeTab === "council" ? <FleetCouncilView _council={council} /> : null}
+
+          {activeTab === "telemetry" ? (
+            <FleetTelemetryView
+              telemetry={telemetry}
+              isLoading={isLoading}
+              onRefresh={refreshQuotas}
+            />
+          ) : null}
 
           {activeTab === "runner" ? (
             <FleetRunnerView nodes={nodes} onDispatchTask={dispatchTask} />
