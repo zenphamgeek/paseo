@@ -18,6 +18,7 @@ import { ClefCouncil } from "./clef/index.js";
 import { GoalEngine } from "./goal/index.js";
 import { getTelemetryHub, getTelegramAlerter } from "./telemetry/index.js";
 import { getHermesManager } from "./hermes/index.js";
+import { getZencodeOAuthManager } from "./auth/zencode-oauth-manager.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -804,6 +805,49 @@ function mountZencodeFleetAndGoalEndpoints(
         res.status(500).json({ error: message });
       }
     })();
+  });
+
+  // Zencode Universal OAuth & Provider Credential Status
+  app.get("/api/fleet/auth/status", (_req, res) => {
+    void (async () => {
+      try {
+        const status = await getZencodeOAuthManager().getStatus();
+        res.json(status);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // Zencode 1-Click Auto-Configure & Credential Harvester
+  app.post("/api/fleet/auth/autoconfig", (_req, res) => {
+    void (async () => {
+      try {
+        const result = await getZencodeOAuthManager().autoConfigureAll();
+        getZencodeOAuthManager().applyToEnvironment();
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // Zencode Manual Easy OAuth / Credential Setup
+  app.post("/api/fleet/auth/manual", (req, res) => {
+    try {
+      const { provider, token, authType, account } = req.body || {};
+      const result = getZencodeOAuthManager().setManualCredentials(provider, {
+        token,
+        authType,
+        account,
+      });
+      res.json(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   app.post("/api/goal/start", (req, res) => {
