@@ -1,0 +1,1229 @@
+openapi: 3.1.0
+info:
+  title: ZenCode Enterprise Platform Internal API Gateway
+  description: >-
+    Canonical OpenAPI 3.1 specification for ZenCode Enterprise (`zencode-ent`),
+    governing inter-service communication between Core Ingress Gateway (`/zencode`),
+    9router Mesh (`/router`), Paseo Hub Automation DAGs (`/hub`), Financial GRC
+    Engine (`/vertical`), and Clef Multimodal Serving (`/AI`).
+
+    Enforces distributed tracing propagation (`x-trace-id`, `x-request-id`, `traceparent`),
+    Sovereign Stealth Mode invariants (zero external outbound telemetry), local in-memory
+    trace span recording, and fail-closed webhook validation.
+  version: 1.0.0
+  contact:
+    name: ZenCode Enterprise Core Engineering
+    url: https://zencode.vn
+  license:
+    name: Proprietary Enterprise License
+
+servers:
+  - url: http://127.0.0.1:6768
+    description: Local Core Ingress Gateway
+  - url: https://app.zencode.vn
+    description: Production Web Application Ingress
+
+security:
+  - BearerAuth: []
+  - CookieAuth: []
+
+paths:
+  /api/health:
+    get:
+      summary: Gateway Health Check
+      description: Returns health status with public caching headers. Skips daemon authentication.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      responses:
+        "200":
+          description: Service is healthy
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              schema:
+                type: string
+                example: "public, max-age=1, s-maxage=5, stale-while-revalidate=10"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/status:
+    get:
+      summary: Gateway Instance Status
+      description: Returns node identification, hostname, daemon version, and listen target.
+      parameters:
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      responses:
+        "200":
+          description: Instance operational metadata
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+
+  /api/system/traces/spans:
+    get:
+      summary: Zero-Telemetry Local Trace Spans Introspection
+      description: >-
+        Inspects locally recorded distributed trace spans stored in an in-memory
+        FIFO circular buffer (1,000 spans) without any external outbound network egress.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+          description: Maximum number of spans to return (newest first)
+        - name: trace_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional filter by specific trace identifier
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional substring match on request path
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      responses:
+        "200":
+          description: List of locally recorded zero-telemetry trace spans
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceSpansResponse"
+
+  /api/fleet/nodes:
+    get:
+      summary: Fleet Nodes Inventory
+      description: Lists active autonomous and managed nodes with proxy mappings and health states.
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["1h", "6h", "24h", "7d"]
+            default: "24h"
+          description: Telemetry retention and observation window
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      responses:
+        "200":
+          description: Active fleet nodes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [nodes, retentionPeriod]
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FleetNode"
+                  retentionPeriod:
+                    type: string
+
+  /api/fleet/nodes/create:
+    post:
+      summary: Provision Fleet Node
+      description: Dynamically creates and registers a fleet compute node with 1:1 egress proxy slot.
+      parameters:
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                tier:
+                  type: string
+                  enum: [free, pro, enterprise]
+                  default: pro
+                preferred_model:
+                  type: string
+                  default: "gemini-3.8-flash-high"
+      responses:
+        "200":
+          description: Fleet node provisioned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetNode"
+
+  /api/fleet/summary:
+    get:
+      summary: Fleet Operational Summary
+      description: Returns high-level cluster state, active jobs count, and passive quota summary.
+      responses:
+        "200":
+          description: Cluster summary
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/fleet/jobs:
+    get:
+      summary: Fleet Jobs Registry
+      description: Returns active and historic execution jobs across fleet nodes.
+      responses:
+        "200":
+          description: List of execution jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /api/fleet/quota/refresh:
+    post:
+      summary: Passive Quota Recalibration
+      description: >-
+        Passive mathematical simulation refresh of node quota balances.
+        Does NOT trigger outbound polling to external provider APIs.
+      responses:
+        "200":
+          description: Quota simulation refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "refreshed"
+
+  /api/fleet/dispatch:
+    post:
+      summary: Autonomous Task Dispatch
+      description: Dispatches code generation or reasoning tasks to optimal candidate node.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                model:
+                  type: string
+                target_node:
+                  type: string
+      responses:
+        "200":
+          description: Task accepted and dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/fleet/agents/stop:
+    post:
+      summary: Stop Running Agent
+      description: Terminates an active agent process or job across the fleet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id]
+              properties:
+                agent_id:
+                  type: string
+      responses:
+        "200":
+          description: Agent terminated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/fleet/modal/resolve:
+    get:
+      summary: Resolve Direct Modal Workload Endpoint (Proxy to router:7777)
+      description: >-
+        Proxies request to 9router (`http://127.0.0.1:7777/api/fleet/modal/resolve`),
+        propagating `x-trace-id` and `x-request-id`. Resolves direct Modal execution
+        URLs for 7 canonical GPU workloads across 23 workspaces with headroom evaluation.
+      parameters:
+        - name: app_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Canonical workload identifier (e.g. `qwen_img_21`, `wan_s2v_14b`, `omnivoice_tts`)
+        - name: workload
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Alias for app_id
+        - name: workspace
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Alias for preferred_workspace override
+        - name: preferred_workspace
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Preferred Modal workspace override
+        - name: variant
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Endpoint variant (e.g. `async`, `web_ui`, `edit`)
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      responses:
+        "200":
+          description: Direct execution contract resolved
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModalResolveResponse"
+        "400":
+          description: Invalid or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Failed to connect to downstream router mesh on port 7777
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/fleet/modal/telemetry:
+    post:
+      summary: Report Modal Execution Telemetry (Proxy to router:7777)
+      description: >-
+        Proxies runtime execution telemetry to 9router (`/api/fleet/modal/telemetry/report`),
+        propagating distributed tracing headers. Records GPU cost and atomically updates local ledgers.
+      parameters:
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModalTelemetryRequest"
+      responses:
+        "200":
+          description: Execution telemetry recorded
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModalTelemetryResponse"
+        "502":
+          description: Downstream router communication failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/fleet/modal/resources.json:
+    get:
+      summary: Modal Fleet MCP Resource Catalog (Proxy to router:7777)
+      description: >-
+        Returns standardized JSON catalog of 7 canonical Modal GPU workloads,
+        headroom, spend status ($25 headroom ceiling), target GPUs, and direct URLs.
+      security: []
+      parameters:
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      responses:
+        "200":
+          description: Canonical Modal Fleet MCP Resource Catalog
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModalResourcesCatalogResponse"
+
+  /api/fleet/modal/summary:
+    get:
+      summary: Modal GPU Swarm Summary
+      description: Returns worker counts, cloudburst statistics, and spend totals.
+      responses:
+        "200":
+          description: Swarm summary
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/fleet/modal/workers:
+    get:
+      summary: Modal Deployed Workers List
+      parameters:
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of deployed Modal workers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workers:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /api/fleet/modal/workloads:
+    get:
+      summary: Modal Canonical Workloads
+      description: Returns the 7 canonical GPU workloads supported by ZenCode Enterprise.
+      responses:
+        "200":
+          description: Workload catalog definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workloads:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /api/fleet/modal/profile/switch:
+    post:
+      summary: Switch Active Modal Workspace Profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile]
+              properties:
+                profile:
+                  type: string
+      responses:
+        "200":
+          description: Active profile switched
+
+  /api/fleet/self-healing/incidents:
+    get:
+      summary: Self-Healing Incident Registry
+      description: Returns recorded operational incidents and remediation states.
+      responses:
+        "200":
+          description: Incidents list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidents:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /api/fleet/self-healing/report:
+    post:
+      summary: Report Self-Healing Incident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [incident_type, message]
+              properties:
+                incident_type:
+                  type: string
+                message:
+                  type: string
+                node:
+                  type: string
+      responses:
+        "200":
+          description: Incident recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/fleet/self-healing/incidents/{id}/heal:
+    post:
+      summary: Execute Self-Healing Remediation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Remediation initiated
+
+  /api/billing/plans:
+    get:
+      summary: Subscription Plans & Pricing
+      description: Lists active ZenCode subscription tiers (Free, Pro, Enterprise) with credit limits.
+      security: []
+      responses:
+        "200":
+          description: Available plans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plans:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BillingPlan"
+
+  /api/billing/orders/create:
+    post:
+      summary: Create Payment Order
+      description: Generates an order for VietQR / SePay checkout with bank transfer QR code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingOrderCreateRequest"
+      responses:
+        "200":
+          description: Order created with VietQR metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingOrderResponse"
+
+  /api/billing/orders/{orderCode}/status:
+    get:
+      summary: Query Order Payment Status
+      parameters:
+        - name: orderCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current order payment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingOrderResponse"
+
+  /api/billing/sepay/webhook:
+    post:
+      summary: SePay VietQR Payment Webhook
+      description: Ingests automated bank transfer notifications from SePay with transaction deduplication.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SepayWebhookPayload"
+      responses:
+        "200":
+          description: Payment credited successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  /api/billing/credits/balance:
+    get:
+      summary: User Credit Balance
+      description: Queries remaining token quota and credit balances for the authenticated caller.
+      responses:
+        "200":
+          description: User credit ledger status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId:
+                    type: string
+                  credits:
+                    type: number
+                  tier:
+                    type: string
+
+  /api/hub/webhooks/linear:
+    post:
+      summary: Linear Webhook Ingress (Proxy to hub:3000)
+      description: >-
+        Ingests Linear issue, comment, and project events.
+        Enforces fail-closed HMAC-SHA256 signature verification via `linear-signature` header.
+        Propagates `x-trace-id` and `x-request-id` to Paseo Hub DAG runtime.
+      security: []
+      parameters:
+        - name: linear-signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC-SHA256 signature calculated from the raw webhook payload
+        - name: linear-delivery
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Unique delivery identifier for idempotency
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinearWebhookPayload"
+      responses:
+        "200":
+          description: Webhook accepted and queued for execution
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "401":
+          description: Missing or invalid `linear-signature` header
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Paseo Hub execution runtime unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/hub/webhooks/slack:
+    post:
+      summary: Slack Webhook Ingress (Proxy to hub:3000)
+      description: >-
+        Ingests Slack interaction and event subscriptions.
+        Enforces fail-closed HMAC-SHA256 signature (`x-slack-signature`) and timestamp (`x-slack-request-timestamp`).
+      security: []
+      parameters:
+        - name: x-slack-signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Slack signature in format `v0=<hash>`
+        - name: x-slack-request-timestamp
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Epoch timestamp (rejects clock skew > 300s)
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SlackWebhookPayload"
+      responses:
+        "200":
+          description: Webhook handled or url_verification challenge answered
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          description: Missing or invalid Slack signatures
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Hub processor unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/hub/webhooks/github:
+    post:
+      summary: GitHub Webhook Ingress (Proxy to hub:3000)
+      description: >-
+        Ingests GitHub repository, push, and PR webhook events.
+        Enforces fail-closed HMAC-SHA256 signature (`x-hub-signature-256`).
+      security: []
+      parameters:
+        - name: x-hub-signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+          description: GitHub signature in format `sha256=<hash>`
+        - name: x-github-event
+          in: header
+          required: false
+          schema:
+            type: string
+          description: GitHub event type (e.g. `push`, `pull_request`)
+        - name: x-github-delivery
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Delivery GUID for idempotency deduplication
+        - $ref: "#/components/parameters/TraceIdHeader"
+        - $ref: "#/components/parameters/RequestIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GitHubWebhookPayload"
+      responses:
+        "200":
+          description: Webhook accepted
+          headers:
+            x-trace-id:
+              $ref: "#/components/headers/XTraceId"
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "401":
+          description: Missing or invalid `x-hub-signature-256` header
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Hub processor unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "User session token or API key (`Authorization: Bearer <token>`)"
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: zen_token
+      description: "Session authentication cookie for `app.zencode.vn` web-app gating"
+
+  parameters:
+    TraceIdHeader:
+      name: x-trace-id
+      in: header
+      required: false
+      description: "Distributed trace identifier (UUIDv4)"
+      schema:
+        type: string
+        format: uuid
+        example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+    RequestIdHeader:
+      name: x-request-id
+      in: header
+      required: false
+      description: "Per-request correlation identifier (UUIDv4)"
+      schema:
+        type: string
+        format: uuid
+        example: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
+    TraceParentHeader:
+      name: traceparent
+      in: header
+      required: false
+      description: "W3C distributed traceparent header"
+      schema:
+        type: string
+        example: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+  headers:
+    XTraceId:
+      description: "UUIDv4 distributed trace identifier attached to response"
+      schema:
+        type: string
+        format: uuid
+    XRequestId:
+      description: "UUIDv4 request correlation identifier attached to response"
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    TraceSpan:
+      type: object
+      required:
+        - span_id
+        - trace_id
+        - method
+        - path
+        - status_code
+        - duration_ms
+        - timestamp
+      properties:
+        span_id:
+          type: string
+          format: uuid
+          description: "Unique span identifier (UUIDv4)"
+        trace_id:
+          type: string
+          description: "Distributed trace identifier linking related service spans"
+        request_id:
+          type: string
+          description: "Request correlation identifier"
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD]
+        path:
+          type: string
+          description: "Path and query of the executed request"
+        status_code:
+          type: integer
+          minimum: 100
+          maximum: 599
+          description: "HTTP status code returned"
+        duration_ms:
+          type: number
+          minimum: 0
+          description: "Execution latency in milliseconds"
+        timestamp:
+          type: string
+          format: date-time
+          description: "ISO-8601 completion timestamp"
+
+    TraceSpansResponse:
+      type: object
+      required:
+        - spans
+        - total
+        - size
+        - capacity
+        - zero_telemetry
+        - timestamp
+      properties:
+        spans:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceSpan"
+        total:
+          type: integer
+          description: "Total spans recorded since process boot"
+        size:
+          type: integer
+          description: "Current number of spans buffered in ring memory"
+        capacity:
+          type: integer
+          example: 1000
+          description: "Circular buffer maximum slot capacity"
+        zero_telemetry:
+          type: boolean
+          const: true
+          description: "Invariant assertion confirming zero outbound network egress"
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: "Human-readable error description"
+        code:
+          type: string
+          description: "Machine-readable error classification code"
+        details:
+          type: string
+          description: "Detailed diagnostics or stack summary"
+        target:
+          type: string
+          description: "Downstream endpoint target if failure occurred during proxying"
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          example: "ok"
+        timestamp:
+          type: string
+          format: date-time
+
+    StatusResponse:
+      type: object
+      required:
+        - status
+        - serverId
+        - hostname
+        - version
+        - listen
+      properties:
+        status:
+          type: string
+          example: "server_info"
+        serverId:
+          type: string
+        hostname:
+          type: string
+        version:
+          type: string
+        listen:
+          type: string
+
+    FleetNode:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - proxy_port
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [online, busy, degraded, offline]
+        proxy_port:
+          type: integer
+          minimum: 20128
+          maximum: 20143
+          description: "Dedicated 1:1 egress proxy port slot"
+        tier:
+          type: string
+        uptime_seconds:
+          type: number
+
+    ModalResolveResponse:
+      type: object
+      required:
+        - app_id
+        - target_gpu
+        - direct_url
+        - active_workspace
+      properties:
+        app_id:
+          type: string
+          example: "qwen_img_21"
+        target_gpu:
+          type: string
+          example: "A100-80GB"
+        direct_url:
+          type: string
+          format: uri
+          example: "https://lovenovel--qwen-image.modal.run"
+        active_workspace:
+          type: string
+          example: "lovenovel"
+        spend_usd:
+          type: number
+          minimum: 0
+        spend_ceiling_usd:
+          type: number
+          example: 25.0
+        failover_workspaces:
+          type: array
+          items:
+            type: string
+          example: ["mvlm", "zenonmind", "mojopham", "verticalresilience"]
+
+    ModalTelemetryRequest:
+      type: object
+      required:
+        - run_id
+        - duration_s
+      properties:
+        run_id:
+          type: string
+          description: "Unique execution run ID"
+        duration_s:
+          type: number
+          minimum: 0
+          description: "Run duration in seconds"
+        status:
+          type: string
+          default: "success"
+          enum: [success, error, timeout]
+        tokens_or_frames:
+          type: integer
+          default: 0
+        app_id:
+          type: string
+          example: "qwen_img_21"
+        workspace:
+          type: string
+          example: "insimind"
+        gpu_tier:
+          type: string
+          example: "A100-80GB"
+        cost_usd:
+          type: number
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ModalTelemetryResponse:
+      type: object
+      required:
+        - status
+        - run_id
+        - cost_usd
+        - workspace
+        - current_spend_usd
+      properties:
+        status:
+          type: string
+          example: "recorded"
+        run_id:
+          type: string
+        cost_usd:
+          type: number
+        workspace:
+          type: string
+        current_spend_usd:
+          type: number
+        total_fleet_spend_usd:
+          type: number
+
+    ModalResourcesCatalogResponse:
+      type: object
+      required:
+        - catalog_version
+        - workloads
+      properties:
+        catalog_version:
+          type: string
+        workloads:
+          type: object
+          additionalProperties: true
+
+    LinearWebhookPayload:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          example: "create"
+        type:
+          type: string
+          example: "Issue"
+        data:
+          type: object
+          additionalProperties: true
+
+    SlackWebhookPayload:
+      type: object
+      properties:
+        type:
+          type: string
+        challenge:
+          type: string
+        event:
+          type: object
+          additionalProperties: true
+
+    GitHubWebhookPayload:
+      type: object
+      properties:
+        action:
+          type: string
+        ref:
+          type: string
+        repository:
+          type: object
+          additionalProperties: true
+        sender:
+          type: object
+          additionalProperties: true
+
+    BillingPlan:
+      type: object
+      required:
+        - id
+        - name
+        - priceVnd
+        - credits
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        priceVnd:
+          type: number
+        credits:
+          type: number
+
+    BillingOrderCreateRequest:
+      type: object
+      required:
+        - planId
+      properties:
+        planId:
+          type: string
+          enum: [starter, pro, enterprise]
+        userId:
+          type: string
+
+    BillingOrderResponse:
+      type: object
+      required:
+        - orderCode
+        - amount
+        - status
+        - qrCodeUrl
+      properties:
+        orderCode:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [PENDING, PAID, EXPIRED, CANCELLED]
+        qrCodeUrl:
+          type: string
+          format: uri
+
+    SepayWebhookPayload:
+      type: object
+      required:
+        - gateway
+        - transactionDate
+        - accountNumber
+        - transferType
+        - transferAmount
+      properties:
+        id:
+          type: integer
+        gateway:
+          type: string
+        transactionDate:
+          type: string
+        accountNumber:
+          type: string
+        code:
+          type: string
+        content:
+          type: string
+        transferType:
+          type: string
+          enum: [in, out]
+        transferAmount:
+          type: number
+        referenceCode:
+          type: string

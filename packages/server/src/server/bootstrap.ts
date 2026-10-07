@@ -36,6 +36,11 @@ import { getSepayGateway, ZENCODE_PLANS } from "./billing/sepay-gateway.js";
 import { getGoogleOAuthService } from "./auth/google-oauth-service.js";
 import { AntiSybilLedger, getAntiSybilLedger } from "./auth/anti-sybil-ledger.js";
 import { createWebAppGatingMiddleware } from "./web-app-gating.js";
+import {
+  distributedTracingMiddleware,
+  createTracingHeaders,
+  createTraceSpansRouteHandler,
+} from "./tracing/index.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -795,6 +800,246 @@ export function clearAllCreditReservations(): void {
   inFlightCreditReservationsByUser.clear();
 }
 
+function mountModalRouterProxyRoutes(app: express.Express): void {
+  const routerBaseUrl =
+    process.env.ROUTER_BASE_URL || process.env.NINE_ROUTER_URL || "http://127.0.0.1:7777";
+
+  // Proxy GET /api/fleet/modal/resolve -> router:7777/api/fleet/modal/resolve
+  app.get("/api/fleet/modal/resolve", async (req, res) => {
+    try {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(req.query)) {
+        if (typeof value === "string") {
+          params.set(key, value);
+        }
+      }
+      if (req.query.workload && !params.has("app_id")) {
+        params.set("app_id", String(req.query.workload));
+      }
+      if (req.query.workspace && !params.has("preferred_workspace")) {
+        params.set("preferred_workspace", String(req.query.workspace));
+      }
+
+      const queryString = params.toString();
+      const targetUrl = `${routerBaseUrl}/api/fleet/modal/resolve${queryString ? `?${queryString}` : ""}`;
+
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        ...createTracingHeaders(req),
+      };
+      if (req.header("authorization")) {
+        headers["authorization"] = req.header("authorization")!;
+      }
+
+      const forwardRes = await fetch(targetUrl, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await forwardRes.json().catch(() => ({}));
+      res.status(forwardRes.status).json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({
+        error: "Failed to connect to router mesh on port 7777",
+        target: `${routerBaseUrl}/api/fleet/modal/resolve`,
+        details: message,
+      });
+    }
+  });
+
+  // Proxy POST /api/fleet/modal/telemetry -> router:7777/api/fleet/modal/telemetry/report
+  const handleModalTelemetry = async (req: express.Request, res: express.Response) => {
+    try {
+      const targetUrl = `${routerBaseUrl}/api/fleet/modal/telemetry/report`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...createTracingHeaders(req),
+      };
+      if (req.header("authorization")) {
+        headers["authorization"] = req.header("authorization")!;
+      }
+
+      const forwardRes = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(req.body || {}),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await forwardRes.json().catch(() => ({}));
+      res.status(forwardRes.status).json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({
+        error: "Failed to connect to router mesh on port 7777",
+        target: `${routerBaseUrl}/api/fleet/modal/telemetry/report`,
+        details: message,
+      });
+    }
+  };
+
+  app.post("/api/fleet/modal/telemetry", handleModalTelemetry);
+  app.post("/api/fleet/modal/telemetry/report", handleModalTelemetry);
+
+  // Proxy GET /api/fleet/modal/resources.json -> router:7777/api/fleet/modal/resources.json
+  app.get("/api/fleet/modal/resources.json", async (req, res) => {
+    try {
+      const queryString = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+      const targetUrl = `${routerBaseUrl}/api/fleet/modal/resources.json${queryString}`;
+
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        ...createTracingHeaders(req),
+      };
+      if (req.header("authorization")) {
+        headers["authorization"] = req.header("authorization")!;
+      }
+
+      const forwardRes = await fetch(targetUrl, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await forwardRes.json().catch(() => ({}));
+      res.status(forwardRes.status).json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({
+        error: "Failed to connect to router mesh on port 7777",
+        target: `${routerBaseUrl}/api/fleet/modal/resources.json`,
+        details: message,
+      });
+    }
+  });
+}
+
+function mountHubWebhookProxyRoutes(app: express.Express): void {
+  const hubBaseUrl =
+    process.env.PASEO_HUB_URL || process.env.HUB_BASE_URL || "http://127.0.0.1:3000";
+
+  // POST /api/hub/webhooks/linear
+  app.post("/api/hub/webhooks/linear", async (req, res) => {
+    const signature = req.header("linear-signature");
+    if (!signature) {
+      res.status(401).json({ error: "Missing required signature header: linear-signature" });
+      return;
+    }
+
+    try {
+      const targetUrl = `${hubBaseUrl}/api/integrations/linear/events`;
+      const headers: Record<string, string> = {
+        "Content-Type": req.header("content-type") || "application/json",
+        "linear-signature": signature,
+        ...createTracingHeaders(req),
+      };
+      const delivery = req.header("linear-delivery");
+      if (delivery) headers["linear-delivery"] = delivery;
+
+      const forwardRes = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(req.body || {}),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await forwardRes.json().catch(() => ({}));
+      res.status(forwardRes.status).json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(503).json({
+        error: "Hub webhook processor unavailable",
+        target: `${hubBaseUrl}/api/integrations/linear/events`,
+        details: message,
+      });
+    }
+  });
+
+  // POST /api/hub/webhooks/slack
+  app.post("/api/hub/webhooks/slack", async (req, res) => {
+    const signature = req.header("x-slack-signature");
+    const timestamp = req.header("x-slack-request-timestamp");
+    if (!signature || !timestamp) {
+      res.status(401).json({
+        error:
+          "Missing required Slack signature headers (x-slack-signature, x-slack-request-timestamp)",
+      });
+      return;
+    }
+
+    try {
+      const targetUrl = `${hubBaseUrl}/api/integrations/slack/events`;
+      const headers: Record<string, string> = {
+        "Content-Type": req.header("content-type") || "application/json",
+        "x-slack-signature": signature,
+        "x-slack-request-timestamp": timestamp,
+        ...createTracingHeaders(req),
+      };
+
+      const forwardRes = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(req.body || {}),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await forwardRes.json().catch(() => ({}));
+      res.status(forwardRes.status).json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(503).json({
+        error: "Hub webhook processor unavailable",
+        target: `${hubBaseUrl}/api/integrations/slack/events`,
+        details: message,
+      });
+    }
+  });
+
+  // POST /api/hub/webhooks/github
+  app.post("/api/hub/webhooks/github", async (req, res) => {
+    const signature = req.header("x-hub-signature-256");
+    if (!signature) {
+      res
+        .status(401)
+        .json({ error: "Missing required GitHub signature header: x-hub-signature-256" });
+      return;
+    }
+
+    try {
+      const targetUrl = `${hubBaseUrl}/api/integrations/github/events`;
+      const headers: Record<string, string> = {
+        "Content-Type": req.header("content-type") || "application/json",
+        "x-hub-signature-256": signature,
+        ...createTracingHeaders(req),
+      };
+      const event = req.header("x-github-event");
+      if (event) headers["x-github-event"] = event;
+      const delivery = req.header("x-github-delivery");
+      if (delivery) headers["x-github-delivery"] = delivery;
+
+      const forwardRes = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(req.body || {}),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await forwardRes.json().catch(() => ({}));
+      res.status(forwardRes.status).json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(503).json({
+        error: "Hub webhook processor unavailable",
+        target: `${hubBaseUrl}/api/integrations/github/events`,
+        details: message,
+      });
+    }
+  });
+}
+
 function mountZencodeFleetAndGoalEndpoints(
   app: express.Express,
   fleetRegistry: FleetRegistry,
@@ -916,11 +1161,9 @@ function mountZencodeFleetAndGoalEndpoints(
         }
         const validProviders = ["anthropic", "openai", "deepseek", "b.ai"];
         if (!validProviders.includes(provider)) {
-          res
-            .status(400)
-            .json({
-              error: `Unsupported provider '${provider}'. Must be one of: ${validProviders.join(", ")}`,
-            });
+          res.status(400).json({
+            error: `Unsupported provider '${provider}'. Must be one of: ${validProviders.join(", ")}`,
+          });
           return;
         }
         const cleanName = name
@@ -2022,6 +2265,13 @@ function mountZencodeFleetAndGoalEndpoints(
 
   // --- Modal GPU Swarm & Modal CLI Endpoints (Guarded: Modal GPU requires Pro or Enterprise tier) ---
   app.use("/api/fleet/modal", (req, res, next) => {
+    if (
+      req.path === "/resources.json" ||
+      req.path === "/telemetry" ||
+      req.path === "/telemetry/report"
+    ) {
+      return next();
+    }
     const user = resolveCallerUser(req);
     const userTier = user ? user.tier : "free";
     const gate = assertFreeTierGating({ userTier, isModalGpuRequest: true });
@@ -2619,6 +2869,10 @@ export async function createPaseoDaemon(
     logger,
   });
 
+  // Mount distributed tracing middleware before all API endpoints and proxy routes.
+  // Extracts trace_id / request_id, propagates headers, and records local zero-telemetry spans.
+  app.use(distributedTracingMiddleware);
+
   // Service proxy classifies service hosts before daemon auth/route fallthrough.
   // Registered service hosts proxy directly; known service namespaces without a
   // route return 404 and never reach daemon APIs.
@@ -2714,6 +2968,15 @@ export async function createPaseoDaemon(
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
   });
+
+  // Zero-telemetry distributed trace spans introspection endpoint
+  app.get("/api/system/traces/spans", createTraceSpansRouteHandler());
+
+  // Modal Gateway Proxy Routes (resolve, telemetry, resources.json -> router:7777)
+  mountModalRouterProxyRoutes(app);
+
+  // Hub Webhook Ingress Proxy Routes (linear, slack, github -> hub:3000)
+  mountHubWebhookProxyRoutes(app);
 
   // Zencode Swarm & Autonomous endpoints
   mountZencodeFleetAndGoalEndpoints(app, fleetRegistry, nineRouter, goalEngine, swarm.selfHealing);
