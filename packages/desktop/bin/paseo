@@ -32,12 +32,16 @@ if [ -d "${MACOS_DIR}" ]; then
     exit 1
   fi
   APP_EXECUTABLE="${MACOS_HELPER_EXECUTABLE}"
+elif [ -x "${RESOURCES_DIR}/../Zencode.bin" ]; then
+  APP_EXECUTABLE="${RESOURCES_DIR}/../Zencode.bin"
+elif [ -x "${RESOURCES_DIR}/../Zencode" ]; then
+  APP_EXECUTABLE="${RESOURCES_DIR}/../Zencode"
 elif [ -x "${RESOURCES_DIR}/../Paseo.bin" ]; then
   APP_EXECUTABLE="${RESOURCES_DIR}/../Paseo.bin"
 elif [ -x "${RESOURCES_DIR}/../Paseo" ]; then
   APP_EXECUTABLE="${RESOURCES_DIR}/../Paseo"
 else
-  echo "Bundled Paseo executable not found relative to ${RESOURCES_DIR}" >&2
+  echo "Bundled Zencode / Paseo executable not found relative to ${RESOURCES_DIR}" >&2
   exit 1
 fi
 

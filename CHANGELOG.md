@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.11.0-beta.4 - 2026-10-06
+
+### Added
+
+- Added Side Panel Browser RPA with `sidePanel: true` support in `browser_new_tab` and `browser_reveal_tab`, allowing live RPA observation in a split right pane without stealing focus
+- Added Stealth Anti-Bot & Fingerprint Sanitization Engine stripping `navigator.webdriver`, sanitizing `userAgent` and `sec-ch-ua` headers, mimicking Chrome plugins/languages, and sweeping CDP automation variables (`cdc_*`)
+- Added humanized precision input timing in browser RPA with natural hold delay (35–70ms) and double-click pauses (60–100ms)
+- Added OpenCode Fleet Manager with node auto-discovery, standardized email-based naming, and quota randomization under Stealth Mode
+- Added Modal Serverless GPU Swarm orchestrator supporting dynamic vLLM/SGLang provisioning, node health checks, and scale-to-zero
+- Added Self-Healing Supervisor with test-isolated patch validation, automatic merge on passing suites, and circuit breaker fault isolation
+- Added Fleet Analytics time-series database backed by SQLite for real-time tracking of token throughput, latency, and incident reports
+- Added per-conversation Telegram alert toggles (default OFF) and Telegram Alerter with 300s cooldown
+- Added Vibe Audio feedback system for task completion, human attention prompts, and error chimes
+- Added Zencode branding, real-time pulsing card status badges, and Modal GPU Swarm UI in Fleet view
+- Added automated Release Test Matrix verification (`scripts/verify-release-test-matrix.mjs`) and parallel runner (`scripts/run-all-unit-tests.sh`)
+
+### Changed
+
+- Renamed swarm worker node IDs and labels from opaque team designations to standardized email naming conventions
+- Upgraded browser tool RPC broker schema to register `browser_reveal_tab` and optional `sidePanel` placement parameter
+
+### Security
+
+- Enforced absolute Stealth Mode quotas and random query jitter across all upstream provider requests
+- Enforced isolated egress proxies per swarm node to prevent provider quota throttling and cross-identity contamination
+
 ## 0.11.0-beta.3 - 2026-10-02
 
 ### Added

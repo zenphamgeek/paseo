@@ -1,4 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@react-native-async-storage/async-storage", () => {
+  const storage = new Map<string, string>();
+  return {
+    default: {
+      getItem: vi.fn(async (key: string) => storage.get(key) ?? null),
+      setItem: vi.fn(async (key: string, value: string) => {
+        storage.set(key, value);
+      }),
+      removeItem: vi.fn(async (key: string) => {
+        storage.delete(key);
+      }),
+    },
+  };
+});
+
 import {
   buildWorkspaceDesktopTabActions,
   buildWorkspaceTabMenuEntries,
@@ -47,6 +63,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(entries.filter((entry) => entry.kind === "item").map((entry) => entry.label)).toEqual([
       "Copy resume command",
       "Copy agent id",
+      "Telegram Alerts: OFF",
       "Rename",
       "Close to the left",
       "Close to the right",
@@ -78,6 +95,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(entries.filter((entry) => entry.kind === "item").map((entry) => entry.label)).toEqual([
       "Copy resume command",
       "Copy agent id",
+      "Telegram Alerts: OFF",
       "Rename",
       "Close tabs above",
       "Close tabs below",
@@ -364,5 +382,34 @@ describe("buildWorkspaceTabMenuEntries", () => {
       .find((entry) => entry.kind === "separator");
     expect(agentSeparator?.key).toBe("rename-separator");
     expect(terminalSeparator?.key).toBe("rename-separator");
+  });
+
+  it("toggles telegram notifications when selecting the toggle-telegram-alerts entry", () => {
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: createAgentTab(),
+      index: 1,
+      tabCount: 3,
+      menuTestIDBase: "workspace-tab-context-agent_123",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFilePath: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    const telegramEntry = entries.find(
+      (e) => e.kind === "item" && e.key === "toggle-telegram-alerts",
+    );
+    expect(telegramEntry).toBeDefined();
+    if (telegramEntry && telegramEntry.kind === "item") {
+      expect(telegramEntry.label).toBe("Telegram Alerts: OFF");
+      telegramEntry.onSelect();
+    }
   });
 });

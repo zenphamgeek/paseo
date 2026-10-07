@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as ZencodeRouteImport } from "./routes/zencode";
 import { Route as VtcodeRouteImport } from "./routes/vtcode";
 import { Route as TermsRouteImport } from "./routes/terms";
 import { Route as StakpakRouteImport } from "./routes/stakpak";
@@ -79,6 +80,11 @@ import { Route as AlternativesClaudeDesktopRouteImport } from "./routes/alternat
 import { Route as PluginsCategorySlugRouteImport } from "./routes/plugins/category/$slug";
 import { Route as PluginsOwnerSlugRouteImport } from "./routes/plugins/$owner_.$slug";
 
+const ZencodeRoute = ZencodeRouteImport.update({
+  id: "/zencode",
+  path: "/zencode",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const VtcodeRoute = VtcodeRouteImport.update({
   id: "/vtcode",
   path: "/vtcode",
@@ -479,6 +485,7 @@ export interface FileRoutesByFullPath {
   "/stakpak": typeof StakpakRoute;
   "/terms": typeof TermsRoute;
   "/vtcode": typeof VtcodeRoute;
+  "/zencode": typeof ZencodeRoute;
   "/alternatives/claude-desktop": typeof AlternativesClaudeDesktopRoute;
   "/alternatives/codex-app": typeof AlternativesCodexAppRoute;
   "/alternatives/conductor": typeof AlternativesConductorRoute;
@@ -548,6 +555,7 @@ export interface FileRoutesByTo {
   "/stakpak": typeof StakpakRoute;
   "/terms": typeof TermsRoute;
   "/vtcode": typeof VtcodeRoute;
+  "/zencode": typeof ZencodeRoute;
   "/alternatives/claude-desktop": typeof AlternativesClaudeDesktopRoute;
   "/alternatives/codex-app": typeof AlternativesCodexAppRoute;
   "/alternatives/conductor": typeof AlternativesConductorRoute;
@@ -620,6 +628,7 @@ export interface FileRoutesById {
   "/stakpak": typeof StakpakRoute;
   "/terms": typeof TermsRoute;
   "/vtcode": typeof VtcodeRoute;
+  "/zencode": typeof ZencodeRoute;
   "/alternatives/claude-desktop": typeof AlternativesClaudeDesktopRoute;
   "/alternatives/codex-app": typeof AlternativesCodexAppRoute;
   "/alternatives/conductor": typeof AlternativesConductorRoute;
@@ -693,6 +702,7 @@ export interface FileRouteTypes {
     | "/stakpak"
     | "/terms"
     | "/vtcode"
+    | "/zencode"
     | "/alternatives/claude-desktop"
     | "/alternatives/codex-app"
     | "/alternatives/conductor"
@@ -762,6 +772,7 @@ export interface FileRouteTypes {
     | "/stakpak"
     | "/terms"
     | "/vtcode"
+    | "/zencode"
     | "/alternatives/claude-desktop"
     | "/alternatives/codex-app"
     | "/alternatives/conductor"
@@ -833,6 +844,7 @@ export interface FileRouteTypes {
     | "/stakpak"
     | "/terms"
     | "/vtcode"
+    | "/zencode"
     | "/alternatives/claude-desktop"
     | "/alternatives/codex-app"
     | "/alternatives/conductor"
@@ -905,6 +917,7 @@ export interface RootRouteChildren {
   StakpakRoute: typeof StakpakRoute;
   TermsRoute: typeof TermsRoute;
   VtcodeRoute: typeof VtcodeRoute;
+  ZencodeRoute: typeof ZencodeRoute;
   AlternativesClaudeDesktopRoute: typeof AlternativesClaudeDesktopRoute;
   AlternativesCodexAppRoute: typeof AlternativesCodexAppRoute;
   AlternativesConductorRoute: typeof AlternativesConductorRoute;
@@ -923,6 +936,13 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/zencode": {
+      id: "/zencode";
+      path: "/zencode";
+      fullPath: "/zencode";
+      preLoaderRoute: typeof ZencodeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/vtcode": {
       id: "/vtcode";
       path: "/vtcode";
@@ -1485,6 +1505,7 @@ const rootRouteChildren: RootRouteChildren = {
   StakpakRoute: StakpakRoute,
   TermsRoute: TermsRoute,
   VtcodeRoute: VtcodeRoute,
+  ZencodeRoute: ZencodeRoute,
   AlternativesClaudeDesktopRoute: AlternativesClaudeDesktopRoute,
   AlternativesCodexAppRoute: AlternativesCodexAppRoute,
   AlternativesConductorRoute: AlternativesConductorRoute,

@@ -17,6 +17,8 @@ export {
 } from "./plugin-config.js";
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
+import { FleetExecutionMetadataSchema } from "./fleet-types.js";
+export { FleetExecutionMetadataSchema, type FleetExecutionMetadata } from "./fleet-types.js";
 import { z } from "zod";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
@@ -699,6 +701,7 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     type: z.literal("notification"),
     level: z.enum(["info", "warning", "error"]),
     message: z.string(),
+    fleetExecution: FleetExecutionMetadataSchema.optional(),
   }),
   z.object({
     type: z.literal("compaction"),

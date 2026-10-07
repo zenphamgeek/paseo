@@ -157,6 +157,20 @@ describe("daemon web UI route module", () => {
     expect(res.body).toContain('"label":"test-label"');
   });
 
+  test("serves index.html with TLS true and port 443 when behind HTTPS reverse proxy", async () => {
+    const app = createApp({ enabled: true, distDir, publicDir });
+
+    const res = await request(app, "GET", "/", {
+      host: "zencode-qa.innoria.com",
+      "x-forwarded-proto": "https",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('"listen":"zencode-qa.innoria.com:443"');
+    expect(res.body).toContain('"useTls":true');
+    expect(res.body).toContain('"label":"test-label"');
+  });
+
   test("injects hint before closing head tag", async () => {
     const app = createApp({ enabled: true, distDir, publicDir });
 

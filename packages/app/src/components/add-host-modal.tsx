@@ -313,11 +313,18 @@ function AddHostModalContent({ visible, onClose, onCancel, onSaved }: AddHostMod
   const [linkPairing] = useState(() => beginLinkPairing());
   const isMobile = useIsCompactFormFactor();
 
+  const isWebHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("6767");
-  const [useTls, setUseTls] = useState(false);
+  const [host, setHost] = useState(
+    typeof window !== "undefined" &&
+      window.location?.hostname &&
+      window.location.hostname !== "localhost"
+      ? window.location.hostname
+      : "",
+  );
+  const [port, setPort] = useState(isWebHttps ? "443" : "6767");
+  const [useTls, setUseTls] = useState(isWebHttps);
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);

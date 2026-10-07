@@ -232,6 +232,7 @@ export class ZencodeOAuthManager {
     }
   >();
   private readonly logger?: Logger;
+  private autoConfigPromise: Promise<AutoConfigResult> | null = null;
 
   constructor(options?: { configDir?: string; logger?: Logger }) {
     this.configDir = options?.configDir || join(homedir(), ".zencode", "auth");
@@ -814,6 +815,19 @@ export class ZencodeOAuthManager {
   }
 
   public async autoConfigureAll(): Promise<AutoConfigResult> {
+    if (this.autoConfigPromise) {
+      this.logger?.debug("Returning in-flight autoConfigureAll promise (deduplicated)");
+      return this.autoConfigPromise;
+    }
+
+    this.autoConfigPromise = this.executeAutoConfigureAll().finally(() => {
+      this.autoConfigPromise = null;
+    });
+
+    return this.autoConfigPromise;
+  }
+
+  private async executeAutoConfigureAll(): Promise<AutoConfigResult> {
     const items: AutoConfigHarvestItem[] = [];
 
     // Harvest core ecosystems

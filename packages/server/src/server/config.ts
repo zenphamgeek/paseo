@@ -298,7 +298,9 @@ function resolveTlsFromEnv(
 }
 
 function resolveRelayConfig(input: ResolveRelayInput): ResolvedRelay {
-  const environmentEnabled = parseBooleanEnv(input.env.PASEO_RELAY_ENABLED);
+  const environmentEnabled = parseBooleanEnv(
+    input.env.ZENCODE_RELAY_ENABLED ?? input.env.PASEO_RELAY_ENABLED,
+  );
   // COMPAT(relayOptInDefault): daemons whose startup config omitted this field
   // retain relay-on removal semantics until 2027-01-31. Modern homes use false.
   const enabled =
@@ -307,22 +309,24 @@ function resolveRelayConfig(input: ResolveRelayInput): ResolvedRelay {
     input.persisted.daemon?.relay?.enabled ??
     input.enabledFallback;
   const endpoint =
+    input.env.ZENCODE_RELAY_ENDPOINT ??
     input.env.PASEO_RELAY_ENDPOINT ??
     input.persisted.daemon?.relay?.endpoint ??
     DEFAULT_RELAY_ENDPOINT;
   const publicEndpoint =
+    input.env.ZENCODE_RELAY_PUBLIC_ENDPOINT ??
     input.env.PASEO_RELAY_PUBLIC_ENDPOINT ??
     input.persisted.daemon?.relay?.publicEndpoint ??
     endpoint;
   const useTls =
     input.cliRelayUseTls ??
     resolveTlsFromEnv(
-      input.env.PASEO_RELAY_USE_TLS,
+      input.env.ZENCODE_RELAY_USE_TLS ?? input.env.PASEO_RELAY_USE_TLS,
       input.persisted.daemon?.relay?.useTls,
       endpoint === DEFAULT_RELAY_ENDPOINT,
     );
   const publicUseTls = resolveTlsFromEnv(
-    input.env.PASEO_RELAY_PUBLIC_USE_TLS,
+    input.env.ZENCODE_RELAY_PUBLIC_USE_TLS ?? input.env.PASEO_RELAY_PUBLIC_USE_TLS,
     input.persisted.daemon?.relay?.publicUseTls,
     useTls,
   );
@@ -423,13 +427,17 @@ function resolveCorsAllowedOrigins(
   env: NodeJS.ProcessEnv,
   persisted: ReturnType<typeof loadPersistedConfig>,
 ): string[] {
-  const envCorsOrigins = env.PASEO_CORS_ORIGINS
-    ? env.PASEO_CORS_ORIGINS.split(",").map((s) => s.trim())
-    : [];
+  if (env.PASEO_CORS_ORIGINS !== undefined) {
+    return Array.from(
+      new Set(
+        env.PASEO_CORS_ORIGINS.split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0),
+      ),
+    );
+  }
   const persistedCorsOrigins = persisted.daemon?.cors?.allowedOrigins ?? [];
-  return Array.from(
-    new Set([...persistedCorsOrigins, ...envCorsOrigins].filter((s) => s.length > 0)),
-  );
+  return Array.from(new Set(persistedCorsOrigins.filter((s) => s.length > 0)));
 }
 
 function parseTrustedProxiesEnv(value: string | undefined): TrustedProxiesConfig | undefined {
@@ -739,17 +747,32 @@ function resolveRelayOverridePaths(
   cli: CliConfigOverrides | undefined,
 ): string[] {
   const paths: string[] = [];
-  if (cli?.relayEnabled !== undefined || parseBooleanEnv(env.PASEO_RELAY_ENABLED) !== undefined) {
+  if (
+    cli?.relayEnabled !== undefined ||
+    parseBooleanEnv(env.ZENCODE_RELAY_ENABLED ?? env.PASEO_RELAY_ENABLED) !== undefined
+  ) {
     paths.push("daemon.relay.enabled");
   }
-  if (env.PASEO_RELAY_ENDPOINT !== undefined) paths.push("daemon.relay.endpoint");
-  if (env.PASEO_RELAY_PUBLIC_ENDPOINT !== undefined) {
+  if (env.ZENCODE_RELAY_ENDPOINT !== undefined || env.PASEO_RELAY_ENDPOINT !== undefined) {
+    paths.push("daemon.relay.endpoint");
+  }
+  if (
+    env.ZENCODE_RELAY_PUBLIC_ENDPOINT !== undefined ||
+    env.PASEO_RELAY_PUBLIC_ENDPOINT !== undefined
+  ) {
     paths.push("daemon.relay.publicEndpoint");
   }
-  if (cli?.relayUseTls !== undefined || env.PASEO_RELAY_USE_TLS !== undefined) {
+  if (
+    cli?.relayUseTls !== undefined ||
+    env.ZENCODE_RELAY_USE_TLS !== undefined ||
+    env.PASEO_RELAY_USE_TLS !== undefined
+  ) {
     paths.push("daemon.relay.useTls");
   }
-  if (env.PASEO_RELAY_PUBLIC_USE_TLS !== undefined) {
+  if (
+    env.ZENCODE_RELAY_PUBLIC_USE_TLS !== undefined ||
+    env.PASEO_RELAY_PUBLIC_USE_TLS !== undefined
+  ) {
     paths.push("daemon.relay.publicUseTls");
   }
   return paths;

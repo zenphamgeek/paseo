@@ -78,6 +78,12 @@ import { writeMarkdownToRichClipboard } from "@/utils/rich-clipboard";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
 import { setAssistantMarkdownBlockHeight } from "@/utils/assistant-message-height-estimate";
 import { isRenderProfileEnabled } from "@/utils/render-profiler";
+import {
+  FleetExecutionBadge,
+  parseFleetExecutionFromMessage,
+} from "@/components/fleet-execution-badge";
+import type { FleetExecutionMetadata } from "@getpaseo/protocol/fleet-types";
+export { FleetExecutionBadge } from "@/components/fleet-execution-badge";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
 import { PlanCard } from "./plan-card";
 import { useToolCallSheet } from "./tool-call-sheet";
@@ -2078,6 +2084,7 @@ interface NotificationProps {
   level: "info" | "warning" | "error";
   message: string;
   disableOuterSpacing?: boolean;
+  fleetExecution?: FleetExecutionMetadata;
 }
 
 const notificationStylesheet = StyleSheet.create((theme) => ({
@@ -2125,8 +2132,23 @@ export const Notification = memo(function Notification({
   level,
   message,
   disableOuterSpacing,
+  fleetExecution,
 }: NotificationProps) {
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
+
+  const isFleetNotice =
+    Boolean(fleetExecution) ||
+    (typeof message === "string" && message.includes("[Fleet Mode Active]"));
+
+  if (isFleetNotice) {
+    return (
+      <FleetExecutionBadge
+        fleetExecution={fleetExecution}
+        message={message}
+        disableOuterSpacing={resolvedDisableOuterSpacing}
+      />
+    );
+  }
 
   const typeConfig = {
     info: {

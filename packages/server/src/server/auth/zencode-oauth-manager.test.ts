@@ -62,4 +62,17 @@ describe("ZencodeOAuthManager", () => {
       expect(parsed["openai-codex"].access).toBe("sk-test-manual-token-12345678");
     }
   });
+
+  it("deduplicates concurrent autoConfigureAll calls to a single flight", async () => {
+    const manager = new ZencodeOAuthManager();
+    const [res1, res2, res3] = await Promise.all([
+      manager.autoConfigureAll(),
+      manager.autoConfigureAll(),
+      manager.autoConfigureAll(),
+    ]);
+
+    expect(res1).toBe(res2);
+    expect(res2).toBe(res3);
+    expect(res1.configuredCount).toBeGreaterThan(0);
+  });
 });

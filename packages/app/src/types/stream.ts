@@ -1,6 +1,7 @@
 import type {
   AgentProvider,
   AgentTimelineItem,
+  FleetExecutionMetadata,
   JsonValue,
   ToolCallDetail,
 } from "@getpaseo/protocol/agent-types";
@@ -786,6 +787,7 @@ export interface NotificationItem {
   timestamp: Date;
   level: NotificationLevel;
   message: string;
+  fleetExecution?: FleetExecutionMetadata;
 }
 
 export interface CompactionItem {
@@ -1565,6 +1567,7 @@ function reduceTimelineEvent(
         timestamp,
         level: item.level,
         message: item.message,
+        fleetExecution: item.fleetExecution,
       };
       return finalizeActiveThoughts(appendNotification(state, notification));
     }

@@ -140,6 +140,13 @@ const OPENCODE_MODES: AgentProviderModeDefinition[] = [
     icon: "ShieldEllipsis",
     colorTier: "planning",
   },
+  {
+    id: "fleet",
+    label: "Fleet Swarm",
+    description: "Autonomous swarm orchestration across multi-account fleet nodes and GPUs",
+    icon: "Network",
+    colorTier: "safe",
+  },
 ];
 
 export const OMP_MODES: AgentProviderModeDefinition[] = [

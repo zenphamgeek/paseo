@@ -71,6 +71,10 @@ import {
   unregisterPaseoBrowserHost,
 } from "./features/browser-webviews/index.js";
 import {
+  installStealthSessionGuards,
+  getCleanChromeUserAgent,
+} from "./features/browser-webviews/stealth-antibot.js";
+import {
   clearPaseoBrowserProfile,
   getLegacyPaseoBrowserProfileSession,
   PASEO_BROWSER_PROFILE_PARTITION,
@@ -111,7 +115,7 @@ const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "paseo";
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Paseo";
+const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Zencode";
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
@@ -320,7 +324,7 @@ if (forcedUserDataDir) {
     );
     const isWorktree = path.resolve(topLevel, ".git") !== commonDir;
     if (isWorktree) {
-      app.setPath("userData", path.join(app.getPath("appData"), `Paseo-${devWorktreeName}`));
+      app.setPath("userData", path.join(app.getPath("appData"), `Zencode-${devWorktreeName}`));
       log.info("[worktree] isolated userData for worktree:", devWorktreeName);
     } else {
       devWorktreeName = null;
@@ -344,8 +348,8 @@ if (electronFlags) {
 
 if (process.platform === "linux") {
   // Keep the desktop/dock identity independent of the wrapped Electron filename.
-  app.setDesktopName("Paseo.desktop");
-  if (!app.commandLine.hasSwitch("class")) app.commandLine.appendSwitch("class", "Paseo");
+  app.setDesktopName("Zencode.desktop");
+  if (!app.commandLine.hasSwitch("class")) app.commandLine.appendSwitch("class", "Zencode");
   log.info("[linux-sandbox]", {
     enabled: !app.commandLine.hasSwitch("no-sandbox"),
     reason: process.env.PASEO_DESKTOP_SANDBOX_REASON ?? "Chromium default",
@@ -403,6 +407,11 @@ ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => 
   const guest = webContents.fromId(input.webContentsId);
   if (!guest) {
     throw new Error("Attached browser guest disappeared after registration");
+  }
+  try {
+    guest.setUserAgent(getCleanChromeUserAgent());
+  } catch {
+    // best-effort
   }
   browserKeyboard.attach({ contents: guest, hostContents: event.sender });
   log.info("[browser-webview] registered", {
@@ -758,6 +767,11 @@ async function createWindow(
     webPreferences.preload = getBrowserKeyboardPreloadPath();
   });
   mainWindow.webContents.on("did-attach-webview", (_event, contents) => {
+    try {
+      contents.setUserAgent(getCleanChromeUserAgent());
+    } catch {
+      // best-effort
+    }
     preparePaseoBrowserWebContents(contents);
     contents.once("destroyed", () => {
       pendingBrowserWindowOpenRequests.delete(contents.id);
@@ -969,6 +983,12 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle("paseo:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
   registerEditorTargetHandlers();
   registerBrowserAutomationIpc();
+  try {
+    const profileSession = getPaseoBrowserProfileSession(session);
+    installStealthSessionGuards(profileSession as any);
+  } catch (error) {
+    log.warn("[browser-stealth] failed to install session guards", error);
+  }
 
   // In-app "Open in new window": opens a window that lands on the given project
   // via the same open-project flow as a CLI launch (no move, no ownership).

@@ -51,6 +51,7 @@ export async function dispatchTrustedClick(
   });
   if (options.doubleClick) {
     await dispatchTrustedMouseClick(send, point, button, modifiers, 1);
+    await new Promise((resolve) => setTimeout(resolve, 60 + Math.floor(Math.random() * 40)));
     await dispatchTrustedMouseClick(send, point, button, modifiers, 2);
     return;
   }
@@ -73,6 +74,8 @@ async function dispatchTrustedMouseClick(
     clickCount,
     modifiers,
   });
+  // Humanized click hold delay (natural human click duration is 35-70ms)
+  await new Promise((resolve) => setTimeout(resolve, 35 + Math.floor(Math.random() * 35)));
   await send("Input.dispatchMouseEvent", {
     type: "mouseReleased",
     x: point.x,

@@ -94,3 +94,30 @@ app.json
 
 # Heap snapshots dumped by --heapsnapshot-near-heap-limit; keep them for debugging.
 *.heapsnapshot
+
+# Database and runtime data files (do not commit)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+data/*.db*
+data/*.jsonl
+packages/server/data/*.db*
+packages/server/data/*.jsonl
+
+# Kubernetes & Cluster secrets
+local.yaml
+*.kubeconfig
+*.key
+*.crt
+
+# Agent transcripts & scratch caches
+.agents/
+.pytest_cache/
+
+# Docker build tarballs
+*.tgz
+docker/paseo-packs/
+

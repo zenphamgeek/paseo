@@ -39,6 +39,7 @@ export interface AgentConfigSessionOptions {
   host: AgentConfigSessionHost;
   operations: AgentConfigOperations;
   logger: pino.Logger;
+  getUserTier?: (agentId?: string) => string | undefined;
 }
 
 interface ConfigChange {
@@ -62,11 +63,13 @@ export class AgentConfigSession {
   private readonly host: AgentConfigSessionHost;
   private readonly operations: AgentConfigOperations;
   private readonly logger: pino.Logger;
+  private readonly getUserTier?: (agentId?: string) => string | undefined;
 
   constructor(options: AgentConfigSessionOptions) {
     this.host = options.host;
     this.operations = options.operations;
     this.logger = options.logger;
+    this.getUserTier = options.getUserTier;
   }
 
   handleSetAgentModeRequest(
@@ -88,6 +91,33 @@ export class AgentConfigSession {
     msg: Extract<SessionInboundMessage, { type: "set_agent_model_request" }>,
   ): Promise<void> {
     const { agentId, modelId, requestId } = msg;
+
+    if (modelId && /opus/i.test(modelId)) {
+      const tier = this.getUserTier ? this.getUserTier(agentId) : undefined;
+      if (tier === "free") {
+        const errorMsg = "Claude Opus 5.5 requires Pro or Enterprise tier";
+        this.host.emit({
+          type: "activity_log",
+          payload: {
+            id: uuidv4(),
+            timestamp: new Date(),
+            type: "error",
+            content: `${errorMsg}. Upgrade at /#pricing`,
+          },
+        });
+        this.host.emit({
+          type: "set_agent_model_response",
+          payload: {
+            requestId,
+            agentId,
+            accepted: false,
+            error: errorMsg,
+          },
+        });
+        return Promise.resolve();
+      }
+    }
+
     return this.applyConfigChange({
       agentId,
       requestId,
@@ -177,6 +207,12 @@ export class AgentConfigSession {
     let notice: AgentProviderNotice | null = null;
 
     if (config.modelId !== undefined) {
+      if (config.modelId && /opus/i.test(config.modelId)) {
+        const tier = this.getUserTier ? this.getUserTier(agentId) : undefined;
+        if (tier === "free") {
+          throw new Error("Claude Opus 5.5 requires Pro or Enterprise tier");
+        }
+      }
       await this.operations.setModel(agentId, config.modelId);
     }
     if (config.modeId !== undefined) {

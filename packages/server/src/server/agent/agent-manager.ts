@@ -943,6 +943,37 @@ export class AgentManager {
     );
   }
 
+  getActiveSpecialistAgentsCount(userId?: string): number {
+    let count = 0;
+    for (const agent of this.agents.values()) {
+      if (this.hasInFlightRun(agent.id)) {
+        if (!userId) {
+          count++;
+        } else {
+          const agentUser = agent.labels?.userId || agent.labels?.user_id || agent.labels?.ownerId;
+          if (!agentUser || agentUser === userId) {
+            count++;
+          }
+        }
+      }
+    }
+    return count;
+  }
+
+  assertSpecialistAgentConcurrency(userTier: string, userId?: string): void {
+    if (userTier === "free") {
+      const activeCount = this.getActiveSpecialistAgentsCount(userId);
+      if (activeCount >= 2) {
+        const err = new Error(
+          "Free tier allows a maximum of 2 Specialist Agents running concurrently (Architect + Coder)",
+        );
+        (err as any).statusCode = 429;
+        (err as any).upgradeUrl = "/#pricing";
+        throw err;
+      }
+    }
+  }
+
   subscribe(callback: AgentSubscriber, options?: SubscribeOptions): () => void {
     const targetAgentId =
       options?.agentId == null ? null : validateAgentId(options.agentId, "subscribe");
@@ -1244,6 +1275,10 @@ export class AgentManager {
     options: CreateAgentOptions,
   ): Promise<ManagedAgent> {
     this.assertAcceptingAgentRegistrations();
+    if (options.labels?.tier === "free") {
+      const userId = options.labels?.userId || options.labels?.user_id;
+      this.assertSpecialistAgentConcurrency("free", userId);
+    }
     const resolvedAgentId = validateAgentId(agentId ?? this.idFactory(), "createAgent");
     if (this.pluginLifecycle && !config.internal) {
       const request = await this.pluginLifecycle.before("agent.create", {
@@ -1932,10 +1967,18 @@ export class AgentManager {
     return notice;
   }
 
-  async setAgentModel(agentId: string, modelId: string | null): Promise<void> {
+  async setAgentModel(agentId: string, modelId: string | null, userTier?: string): Promise<void> {
     const agent = this.requireSessionAgent(agentId);
     const normalizedModelId =
       typeof modelId === "string" && modelId.trim().length > 0 ? modelId : null;
+
+    const tier = userTier ?? agent.labels?.tier;
+    if (tier === "free" && normalizedModelId && /opus/i.test(normalizedModelId)) {
+      const err = new Error("Claude Opus 5.5 requires Pro or Enterprise tier");
+      (err as any).statusCode = 403;
+      (err as any).upgradeUrl = "/#pricing";
+      throw err;
+    }
 
     if (agent.session.setModel) {
       await agent.session.setModel(normalizedModelId);

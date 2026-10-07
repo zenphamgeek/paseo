@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Logger } from "pino";
+import { getFleetAnalyticsDatabase } from "./fleet-analytics-db.js";
 
 const execAsync = promisify(exec);
 
@@ -181,13 +182,19 @@ export class OpenCodeFleetManager {
     model = "opencode/fledge-alpha-free",
     timeoutMs = 120_000,
   ): Promise<OpenCodeJobResult> {
-    const nodeDir = join(this.fleetDir, "nodes", nodeId);
+    let resolvedNodeId = nodeId;
+    let nodeDir = join(this.fleetDir, "nodes", resolvedNodeId);
+    if (!existsSync(nodeDir) && existsSync(join(this.fleetDir, "nodes", `oc_${resolvedNodeId}`))) {
+      resolvedNodeId = `oc_${resolvedNodeId}`;
+      nodeDir = join(this.fleetDir, "nodes", resolvedNodeId);
+    }
+
     if (!existsSync(nodeDir)) {
       throw new Error(`Node ${nodeId} not found in OpenCode Fleet`);
     }
 
     const timestamp = Date.now();
-    const jobId = `job_${nodeId}_${timestamp}`;
+    const jobId = `job_${resolvedNodeId}_${timestamp}`;
     const outputsDir = join(this.fleetDir, "outputs");
     mkdirSync(outputsDir, { recursive: true });
     const logPath = join(outputsDir, `${jobId}.log`);
@@ -199,7 +206,7 @@ export class OpenCodeFleetManager {
       // Escape prompt for shell argument
       const sanitizedPrompt = prompt.replace(/"/g, '\\"');
       await execAsync(
-        `"${runnerScript}" "${nodeId}" "${model}" "${sanitizedPrompt}" "${logPath}"`,
+        `"${runnerScript}" "${resolvedNodeId}" "${model}" "${sanitizedPrompt}" "${logPath}"`,
         { timeout: timeoutMs },
       );
 
@@ -212,7 +219,7 @@ export class OpenCodeFleetManager {
 
       const result: OpenCodeJobResult = {
         jobId,
-        nodeId,
+        nodeId: resolvedNodeId,
         model,
         prompt: prompt.slice(0, 200),
         status: "completed",
@@ -224,6 +231,29 @@ export class OpenCodeFleetManager {
       };
 
       this.jobHistory.set(jobId, result);
+
+      try {
+        const analyticsDb = getFleetAnalyticsDatabase();
+        const tokensEstimate = Math.max(150, Math.round(durationMs * 30));
+        analyticsDb.recordRequest({
+          id: jobId,
+          nodeId: resolvedNodeId,
+          cluster: "opencode",
+          tier: "free",
+          model,
+          promptSummary: prompt.slice(0, 300),
+          status: "completed",
+          exitCode: 0,
+          durationMs,
+          totalTokens: tokensEstimate,
+          costBilledUsd: 0.0,
+          costSavedUsd: Number(((tokensEstimate / 1_000_000) * 1.25).toFixed(6)),
+          outputPreview,
+        });
+      } catch (dbErr) {
+        this.logger?.warn({ dbErr }, "Failed to record request in analytics DB");
+      }
+
       return result;
     } catch (err: unknown) {
       const durationMs = Date.now() - startTime;
@@ -240,7 +270,7 @@ export class OpenCodeFleetManager {
 
       const result: OpenCodeJobResult = {
         jobId,
-        nodeId,
+        nodeId: resolvedNodeId,
         model,
         prompt: prompt.slice(0, 200),
         status: "failed",
@@ -252,6 +282,30 @@ export class OpenCodeFleetManager {
       };
 
       this.jobHistory.set(jobId, result);
+
+      try {
+        const analyticsDb = getFleetAnalyticsDatabase();
+        const tokensEstimate = Math.max(50, Math.round(durationMs * 15));
+        analyticsDb.recordRequest({
+          id: jobId,
+          nodeId: resolvedNodeId,
+          cluster: "opencode",
+          tier: "free",
+          model,
+          promptSummary: prompt.slice(0, 300),
+          status: "failed",
+          exitCode: 1,
+          durationMs,
+          totalTokens: tokensEstimate,
+          costBilledUsd: 0.0,
+          costSavedUsd: 0.0,
+          outputPreview,
+          errorMessage: errorMsg,
+        });
+      } catch (dbErr) {
+        this.logger?.warn({ dbErr }, "Failed to record failed request in analytics DB");
+      }
+
       return result;
     }
   }

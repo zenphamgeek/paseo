@@ -142,6 +142,24 @@ async function handleBrowserAutomationRequest(params: {
     return;
   }
 
+  if (request.command.command === "reveal_tab") {
+    try {
+      client.sendBrowserAutomationExecuteResponse({
+        type: "browser.automation.execute.response",
+        payload: await revealBrowserTabForRequest({
+          request,
+          serverId,
+        }),
+      });
+    } catch (error) {
+      client.sendBrowserAutomationExecuteResponse({
+        type: "browser.automation.execute.response",
+        payload: normalizeThrownBridgeError(request.requestId, error),
+      });
+    }
+    return;
+  }
+
   if (request.command.command === "resize") {
     client.sendBrowserAutomationExecuteResponse({
       type: "browser.automation.execute.response",
@@ -357,10 +375,16 @@ async function openBrowserTabForRequest(params: {
       message: "Cannot create a browser tab without a workspace context.",
     });
   }
-  useWorkspaceLayoutStore.getState().openTab({
+  const layoutStore = useWorkspaceLayoutStore.getState();
+  const sidePaneId = command.args.sidePanel
+    ? layoutStore.ensureSidePane(workspaceKey, { focus: false })
+    : null;
+
+  layoutStore.openTab({
     workspaceKey,
     target: { kind: "browser", browserId },
-    intent: "background",
+    intent: command.args.sidePanel ? "reveal" : "background",
+    ...(sidePaneId ? { placement: { mode: "pane", paneId: sidePaneId } } : {}),
   });
 
   if (browserHost?.executeAutomationCommand) {
@@ -388,7 +412,61 @@ async function openBrowserTabForRequest(params: {
   return {
     requestId: request.requestId,
     ok: true,
-    result: { command: "new_tab", browserId, workspaceId, url: normalizedUrl },
+    result: {
+      command: "new_tab",
+      browserId,
+      workspaceId,
+      url: normalizedUrl,
+      ...(command.args.sidePanel !== undefined ? { sidePanel: command.args.sidePanel } : {}),
+    },
+  };
+}
+
+async function revealBrowserTabForRequest(params: {
+  request: BrowserAutomationExecuteRequest;
+  serverId?: string;
+}): Promise<BrowserAutomationResponsePayload> {
+  const { request, serverId } = params;
+  const command = request.command as Extract<
+    BrowserAutomationExecuteRequest["command"],
+    { command: "reveal_tab" }
+  >;
+  const browserId = command.args.browserId;
+  const workspaceId = request.workspaceId;
+  const workspaceTab = serverId
+    ? findWorkspaceBrowserTab({ serverId, workspaceId, browserId })
+    : null;
+  if (!workspaceTab && (!serverId || !workspaceId)) {
+    return browserAutomationFailure({
+      requestId: request.requestId,
+      code: "browser_unsupported",
+      message: "Cannot reveal a browser tab without a workspace context.",
+    });
+  }
+  if (!workspaceTab || !getBrowserRecord(browserId)) {
+    return browserAutomationFailure({
+      requestId: request.requestId,
+      code: "browser_tab_not_found",
+      message: `No browser tab found for ID: ${browserId}`,
+    });
+  }
+
+  const layoutStore = useWorkspaceLayoutStore.getState();
+  const isSidePanel = command.args.sidePanel ?? true;
+  if (isSidePanel) {
+    const sidePaneId = layoutStore.ensureSidePane(workspaceTab.workspaceKey, { focus: false });
+    if (sidePaneId) {
+      layoutStore.moveTabToPane(workspaceTab.workspaceKey, workspaceTab.tabId, sidePaneId);
+      layoutStore.selectTabInPane(workspaceTab.workspaceKey, sidePaneId, workspaceTab.tabId);
+    }
+  } else {
+    layoutStore.focusTab(workspaceTab.workspaceKey, workspaceTab.tabId);
+  }
+
+  return {
+    requestId: request.requestId,
+    ok: true,
+    result: { command: "reveal_tab", browserId, sidePanel: isSidePanel },
   };
 }
 

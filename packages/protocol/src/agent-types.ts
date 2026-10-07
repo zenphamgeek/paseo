@@ -1,4 +1,7 @@
 import type { AgentAttachment } from "./messages.js";
+import type { FleetExecutionMetadata } from "./fleet-types.js";
+
+export type { FleetExecutionMetadata };
 
 export type AgentProvider = string;
 
@@ -381,6 +384,7 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
+      fleetExecution?: FleetExecutionMetadata;
     }
   | CompactionTimelineItem
   | PluginTimelineItem;

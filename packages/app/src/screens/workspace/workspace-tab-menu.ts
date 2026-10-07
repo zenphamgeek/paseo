@@ -2,6 +2,8 @@ import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-
 import { i18n } from "@/i18n/i18next";
 import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
+import { useConversationTelegramStore } from "@/stores/conversation-telegram-store";
+import { playVibeSound } from "@/utils/vibe-audio";
 
 export type WorkspaceTabMenuSurface = "desktop" | "mobile";
 
@@ -210,6 +212,19 @@ export function buildWorkspaceTabMenuEntries(
       testID: `${menuTestIDBase}-copy-agent-id`,
       onSelect: () => {
         void onCopyAgentId(agentId);
+      },
+    });
+    const isTelegramActive = useConversationTelegramStore.getState().isTelegramEnabled(agentId);
+    entries.push({
+      kind: "item",
+      key: "toggle-telegram-alerts",
+      label: isTelegramActive ? "Telegram Alerts: ON" : "Telegram Alerts: OFF",
+      icon: "rotate-cw",
+      hint: isTelegramActive ? "Active" : "Off",
+      testID: `${menuTestIDBase}-toggle-telegram-alerts`,
+      onSelect: () => {
+        useConversationTelegramStore.getState().toggleTelegram(agentId);
+        playVibeSound("vibe_start");
       },
     });
   }

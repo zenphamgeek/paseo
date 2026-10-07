@@ -304,6 +304,26 @@ describe("wire schema compatibility", () => {
       message: "Command blocked by user",
     });
   });
+
+  test("notification timeline items parse Fleet Mode execution label with orchestrator and worker", () => {
+    const fleetPayload = {
+      type: "notification",
+      level: "info" as const,
+      message:
+        "[Fleet Mode Active] Orchestrator: zenpham@gmail.com (gemini-2.5-pro) ➔ Delegated Worker: binhthuong@gmail.com (claude-opus-5-5-high)",
+      fleetExecution: {
+        isFleetMode: true,
+        orchestratorNode: "zenpham@gmail.com",
+        orchestratorModel: "gemini-2.5-pro",
+        workerNode: "binhthuong@gmail.com",
+        workerModel: "claude-opus-5-5-high",
+        tier: "pro" as const,
+        taskId: "fleet-task-001",
+        dispatchedAt: "2026-10-06T08:00:00.000Z",
+      },
+    };
+    expect(AgentTimelineItemPayloadSchema.parse(fleetPayload)).toEqual(fleetPayload);
+  });
 });
 
 test("0.8 timeline and setup capabilities remain optional in the hello", () => {

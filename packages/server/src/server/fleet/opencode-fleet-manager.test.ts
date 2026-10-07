@@ -156,4 +156,42 @@ exit 1
     expect(result.exitCode).toBe(1);
     expect(result.outputPreview).toContain("Failure simulated");
   });
+
+  it("automatically resolves oc_ prefix when caller requests unprefixed node name", async () => {
+    const nodeOc = join(testFleetDir, "nodes", "oc_node-gamma");
+    mkdirSync(join(nodeOc, "config"), { recursive: true });
+    mkdirSync(join(nodeOc, "data"), { recursive: true });
+    mkdirSync(join(nodeOc, "workspace"), { recursive: true });
+    writeFileSync(
+      join(nodeOc, "node_metadata.json"),
+      JSON.stringify({
+        node_id: "oc_node-gamma",
+        account_email: "gamma@gmail.com",
+        authenticated: true,
+        auth_type: "google_oauth",
+        status: "idle",
+        jobs_completed: 0,
+        jobs_failed: 0,
+      }),
+    );
+
+    const runnerScript = join(testFleetDir, "bin", "opencode_fleet_run.sh");
+    writeFileSync(
+      runnerScript,
+      `#!/bin/bash
+TARGET_LOG="$4"
+echo "Prefix resolved run: $1" > "$TARGET_LOG"
+exit 0
+`,
+      { mode: 0o755 },
+    );
+
+    const manager = new OpenCodeFleetManager({ fleetDir: testFleetDir });
+    // Caller requests "node-gamma" without "oc_"
+    const result = await manager.dispatchJob("node-gamma", "Prefix test");
+
+    expect(result.status).toBe("completed");
+    expect(result.nodeId).toBe("oc_node-gamma");
+    expect(result.outputPreview).toContain("Prefix resolved run: oc_node-gamma");
+  });
 });

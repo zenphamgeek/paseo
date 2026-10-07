@@ -1,12 +1,14 @@
 import Svg, { G, Path } from "react-native-svg";
 import { useUnistyles } from "react-native-unistyles";
 
-interface PaseoLogoProps {
+export interface ZencodeLogoProps {
   size?: number;
   color?: string;
 }
 
-export function PaseoLogo({ size = 64, color }: PaseoLogoProps) {
+export type PaseoLogoProps = ZencodeLogoProps;
+
+export function ZencodeLogo({ size = 64, color }: ZencodeLogoProps) {
   const { theme } = useUnistyles();
   const fill = color ?? theme.colors.foreground;
 
@@ -23,5 +25,5 @@ export function PaseoLogo({ size = 64, color }: PaseoLogoProps) {
   );
 }
 
-// Zencode branding alias for forward-compatibility
-export { PaseoLogo as ZencodeLogo };
+// Backward-compatible alias
+export { ZencodeLogo as PaseoLogo };

@@ -12,11 +12,13 @@ import {
   Lock,
   PlusCircle,
   RefreshCw,
+  Search,
   ShieldCheck,
   Sparkles,
   Terminal,
   Zap,
 } from "lucide-react-native";
+import { ServiceAppIcon } from "./service-app-icon";
 import type { EcosystemType, FleetAuthMatrix, PluginOAuthStatus } from "./types";
 
 interface FleetAuthViewProps {
@@ -123,9 +125,12 @@ function ProviderCard({ item, onOpenConfig }: ProviderCardProps) {
       testID={`auth-card-${item.provider}`}
     >
       <View style={styles.cardTopRow}>
-        <View style={styles.cardHeaderInfo}>
-          <Text style={styles.providerName}>{item.label}</Text>
-          <Text style={styles.providerKeyId}>{item.provider}</Text>
+        <View style={styles.cardHeaderLeftGroup}>
+          <ServiceAppIcon provider={item.provider} size={22} badgeSize={38} showBadge />
+          <View style={styles.cardHeaderInfo}>
+            <Text style={styles.providerName}>{item.label}</Text>
+            <Text style={styles.providerKeyId}>{item.provider}</Text>
+          </View>
         </View>
         <StatusBadge status={item.status} authType={item.authType} />
       </View>
@@ -189,6 +194,7 @@ export function FleetAuthView({
   const [manualAccount, setManualAccount] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleRunAutoConfig = useCallback(async () => {
     setIsAutoConfiguring(true);
@@ -249,7 +255,19 @@ export function FleetAuthView({
 
     if (!authStatus) return groups;
 
+    const q = searchQuery.toLowerCase().trim();
+
     for (const item of Object.values(authStatus)) {
+      if (
+        q &&
+        !item.provider.toLowerCase().includes(q) &&
+        !item.label.toLowerCase().includes(q) &&
+        !(item.ecosystem && item.ecosystem.toLowerCase().includes(q)) &&
+        !(item.account && item.account.toLowerCase().includes(q))
+      ) {
+        continue;
+      }
+
       const eco: EcosystemType = item.ecosystem || "paseo";
       if (groups[eco]) {
         groups[eco].push(item);
@@ -259,7 +277,7 @@ export function FleetAuthView({
     }
 
     return groups;
-  }, [authStatus]);
+  }, [authStatus, searchQuery]);
 
   const stats = useMemo(() => {
     if (!authStatus) return { total: 0, authCount: 0, percent: 0 };
@@ -344,6 +362,23 @@ export function FleetAuthView({
         </View>
       ) : null}
 
+      {/* Search & Filter Bar */}
+      <View style={styles.searchBar}>
+        <Search size={14} color={styles.textMuted.color} />
+        <AdaptiveTextInput
+          style={styles.searchInput}
+          placeholder="Filter services & plugins (e.g. Figma, Drive, Notion, Telegram, Claude, Codex, Copilot)..."
+          placeholderTextColor={styles.textMuted.color}
+          initialValue={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.trim() ? (
+          <Pressable onPress={() => setSearchQuery("")} style={styles.searchClearBtn}>
+            <Text style={styles.searchClearText}>Clear</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
       {/* Ecosystem Groups */}
       {(["agy", "opencode", "codex", "workspace", "paseo", "infra"] as EcosystemType[]).map(
         (ecoKey) => {
@@ -396,8 +431,16 @@ export function FleetAuthView({
           <View style={styles.modalOverlay}>
             <View style={styles.modalDialog}>
               <View style={styles.modalHeader}>
-                <Key size={20} color={styles.accentText.color} />
-                <Text style={styles.modalTitle}>Configure {selectedProvider.label}</Text>
+                <ServiceAppIcon
+                  provider={selectedProvider.provider}
+                  size={24}
+                  badgeSize={42}
+                  showBadge
+                />
+                <View style={styles.modalTitleWrap}>
+                  <Text style={styles.modalTitle}>Configure {selectedProvider.label}</Text>
+                  <Text style={styles.modalSubtitleId}>{selectedProvider.provider}</Text>
+                </View>
               </View>
               <Text style={styles.modalSubtitle}>
                 Enter your API Key, OAuth token, or session secret. It will be stored in your
@@ -589,6 +632,34 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontWeight: "500",
   },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: theme.colors.surface1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 40,
+  },
+  searchInput: {
+    flex: 1,
+    color: theme.colors.foreground,
+    fontSize: 13,
+    padding: 0,
+  },
+  searchClearBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: theme.colors.surface2,
+  },
+  searchClearText: {
+    fontSize: 11,
+    color: theme.colors.foregroundMuted,
+    fontWeight: "600",
+  },
   ecosystemSection: {
     gap: 12,
   },
@@ -635,8 +706,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   providerCard: {
     flex: 1,
-    minWidth: 260,
-    maxWidth: "49%",
+    minWidth: 280,
+    maxWidth: 520,
     backgroundColor: theme.colors.surface1,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -649,9 +720,15 @@ const styles = StyleSheet.create((theme) => ({
   },
   cardTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 10,
+  },
+  cardHeaderLeftGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   cardHeaderInfo: {
     flex: 1,
@@ -774,12 +851,21 @@ const styles = StyleSheet.create((theme) => ({
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 14,
+  },
+  modalTitleWrap: {
+    flex: 1,
+    gap: 2,
   },
   modalTitle: {
     fontSize: 17,
     fontWeight: "700",
     color: theme.colors.foreground,
+  },
+  modalSubtitleId: {
+    fontSize: 11,
+    fontFamily: "monospace",
+    color: theme.colors.foregroundMuted,
   },
   modalSubtitle: {
     fontSize: 12,

@@ -146,7 +146,7 @@ test("Antigravity creates an agent and answers a prompt with real agy", async ({
         type: "notification",
         level: "warning",
         message:
-          "Antigravity is running with full access\nAntigravity's CLI cannot ask for permission when another app drives it, so Paseo starts it with --dangerously-skip-permissions. Every tool call, including shell commands, runs without asking.",
+          "Antigravity is running with full access\nAntigravity's CLI cannot ask for permission when another app drives it, so Zencode starts it with --dangerously-skip-permissions. Every tool call, including shell commands, runs without asking.",
       },
     ]);
     await client.sendMessage(agent.id, "Reply with exactly ANTIGRAVITY_E2E_OK. No tools.");

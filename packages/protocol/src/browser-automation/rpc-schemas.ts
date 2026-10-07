@@ -23,6 +23,7 @@ const BROWSER_AUTOMATION_WAIT_CONDITION_MESSAGE =
 export const BROWSER_AUTOMATION_COMMAND_NAMES = [
   "list_tabs",
   "new_tab",
+  "reveal_tab",
   "snapshot",
   "click",
   "fill",
@@ -79,9 +80,17 @@ export const BrowserAutomationNewTabCommandSchema = z.object({
   args: z
     .object({
       url: BrowserAutomationHttpUrlSchema.optional(),
+      sidePanel: z.boolean().optional(),
     })
     .strict()
     .default({}),
+});
+
+export const BrowserAutomationRevealTabCommandSchema = z.object({
+  command: z.literal("reveal_tab"),
+  args: BrowserAutomationTabTargetSchema.extend({
+    sidePanel: z.boolean().optional(),
+  }),
 });
 
 export const BrowserAutomationSnapshotCommandSchema = z.object({
@@ -234,6 +243,7 @@ export const BrowserAutomationCloseTabCommandSchema = z.object({
 export const BrowserAutomationCommandSchema = z.discriminatedUnion("command", [
   BrowserAutomationListTabsCommandSchema,
   BrowserAutomationNewTabCommandSchema,
+  BrowserAutomationRevealTabCommandSchema,
   BrowserAutomationSnapshotCommandSchema,
   BrowserAutomationClickCommandSchema,
   BrowserAutomationFillCommandSchema,
@@ -277,6 +287,13 @@ export const BrowserAutomationNewTabResultSchema = z.object({
   browserId: BrowserAutomationBrowserIdSchema,
   workspaceId: z.string().min(1),
   url: z.string().min(1),
+  sidePanel: z.boolean().optional(),
+});
+
+export const BrowserAutomationRevealTabResultSchema = z.object({
+  command: z.literal("reveal_tab"),
+  browserId: BrowserAutomationBrowserIdSchema,
+  sidePanel: z.boolean().optional(),
 });
 
 export const BrowserAutomationSnapshotStatsSchema = z
@@ -458,6 +475,7 @@ export const BrowserAutomationCloseTabResultSchema = z.object({
 export const BrowserAutomationResultSchema = z.discriminatedUnion("command", [
   BrowserAutomationListTabsResultSchema,
   BrowserAutomationNewTabResultSchema,
+  BrowserAutomationRevealTabResultSchema,
   BrowserAutomationSnapshotResultSchema,
   BrowserAutomationClickResultSchema,
   BrowserAutomationFillResultSchema,

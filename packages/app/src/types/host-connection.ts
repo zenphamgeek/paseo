@@ -345,7 +345,11 @@ export function connectionFromListen(listen: string): HostConnection | null {
   }
 
   try {
-    const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(normalizedListen));
+    const listenWithPort =
+      !normalizedListen.includes(":") && !normalizedListen.startsWith("[")
+        ? `${normalizedListen}:443`
+        : normalizedListen;
+    const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(listenWithPort));
     return {
       id: `direct:${endpoint}`,
       type: "directTcp",

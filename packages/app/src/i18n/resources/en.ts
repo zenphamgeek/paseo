@@ -875,7 +875,7 @@ export const en = {
             "Update isn't available because this branch is already up to date with {{baseRef}}",
           mergePrNoGithub: "Merge PR isn't available right now because GitHub isn't connected",
           archiveNotWorktree:
-            "Archive isn't available here because this workspace was not created as a Paseo worktree",
+            "Archive isn't available here because this workspace was not created as a Zencode worktree",
           mergePrNoForge:
             "Merge {{noun}} isn't available right now because {{brand}} isn't connected",
           mergePrMissing: "Merge PR isn't available because there isn't a pull request yet",
@@ -1168,7 +1168,7 @@ export const en = {
       discord: "Discord",
       github: "Create GitHub issue",
       whatsNew: "What's new",
-      appName: "Paseo",
+      appName: "Zencode",
     },
     sections: {
       sessions: "History",
@@ -1316,7 +1316,7 @@ export const en = {
       close: "Close window",
     },
     quitting: {
-      title: "Quitting Paseo...",
+      title: "Quitting Zencode...",
       detail: "Stopping the local daemon.",
     },
     daemon: {
@@ -1347,20 +1347,20 @@ export const en = {
       },
       management: {
         title: "Manage built-in daemon",
-        hint: "Let Paseo start and stop the built-in daemon",
+        hint: "Let Zencode start and stop the built-in daemon",
         pauseTitle: "Pause built-in daemon",
         pauseMessage:
           "This will stop the built-in daemon immediately. Running agents and terminals connected to the built-in daemon will be stopped.",
         pauseAndStop: "Pause and stop",
         registrationFailed:
-          "Built-in daemon started, but Paseo could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
+          "Built-in daemon started, but Zencode could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
         pausedStopFailed:
-          "Built-in daemon management was paused, but Paseo could not stop the daemon.",
+          "Built-in daemon management was paused, but Zencode could not stop the daemon.",
         updateFailed: "Unable to update built-in daemon management.",
       },
       keepRunning: {
         title: "Keep daemon running after quit",
-        hint: "Daemon keeps running when you quit Paseo",
+        hint: "Daemon keeps running when you quit Zencode",
       },
       logs: {
         title: "Log file",
@@ -1427,7 +1427,7 @@ export const en = {
     },
     rosetta: {
       title: "Download the Apple Silicon build",
-      runningIntel: "You're running the Intel build of Paseo under Rosetta on Apple Silicon.",
+      runningIntel: "You're running the Intel build of Zencode under Rosetta on Apple Silicon.",
       highCpu: "This causes high CPU usage. Download the Apple Silicon build to fix it.",
       download: "Download",
     },
@@ -1469,7 +1469,7 @@ export const en = {
         microphone: "Microphone status has not been checked yet.",
       },
       testNotification: {
-        title: "Paseo notification test",
+        title: "Zencode notification test",
         body: "If you can see this, desktop notifications work.",
         notDelivered: "Notification was not delivered. Check System Settings > Notifications.",
         failed: "Failed to send notification.",
@@ -1478,12 +1478,12 @@ export const en = {
     integrations: {
       cli: {
         statusFailed: "Unable to check CLI install status.",
-        installFailed: "Unable to install the Paseo CLI.",
+        installFailed: "Unable to install the Zencode CLI.",
       },
     },
   },
   rootError: {
-    title: "Paseo ran into a problem.",
+    title: "Zencode ran into a problem.",
     body: "Try again to reload the app. If this keeps happening, include the details below when you report it.",
     details: "Details",
   },
@@ -1683,7 +1683,7 @@ export const en = {
     },
     direct: {
       title: "Direct connection",
-      helper: "Enter the address of a Paseo server.",
+      helper: "Enter the address of a Zencode server.",
       fields: {
         host: "Host",
         port: "Port",
@@ -1725,7 +1725,7 @@ export const en = {
     },
     remoteSsh: {
       title: "Remote SSH",
-      helper: "Connect to a Paseo daemon running on the remote host.",
+      helper: "Connect to a Zencode daemon running on the remote host.",
       fields: {
         target: "SSH host",
       },
@@ -1781,15 +1781,15 @@ export const en = {
       enableDescription:
         "Relay lets this device connect from anywhere. Pairing traffic is end-to-end encrypted.",
       relayDocs: "How relay works",
-      relayDocsAccessibility: "Read how Paseo relay works",
+      relayDocsAccessibility: "Read how Zencode relay works",
       enableRelay: "Enable relay",
       enablingRelay: "Enabling...",
       notNow: "Not now",
       directConnectionHint:
         "Without relay, connect directly over TCP, Tailscale, or another VPN. No QR code is created.",
-      updateRequired: "Update the host to enable relay from Paseo Desktop.",
+      updateRequired: "Update the host to enable relay from Zencode Desktop.",
       unavailable: "Pairing offer unavailable.",
-      hint: "Scan this QR code with Paseo on your phone, or copy the link below.",
+      hint: "Scan this QR code with Zencode on your phone, or copy the link below.",
       securityWarning:
         "Treat this pairing link like a password. Anyone with it can access this daemon.",
       qrUnavailable: "QR code unavailable.",
@@ -1824,7 +1824,7 @@ export const en = {
   serviceUrl: {
     title: "Open service URL",
     message: "Open {{url}}?",
-    inPaseo: "In Paseo",
+    inPaseo: "In Zencode",
     externalBrowser: "External browser",
     dontAskAgain: "Don't ask again",
   },
@@ -1944,8 +1944,8 @@ export const en = {
       other: "used {{count}} other tools",
     },
     paseoCalls: {
-      one: "called Paseo {{count}} time",
-      other: "called Paseo {{count}} times",
+      one: "called Zencode {{count}} time",
+      other: "called Zencode {{count}} times",
     },
     and: "and",
   },
@@ -2067,7 +2067,7 @@ export const en = {
       send: "Send",
       sending: "Sending...",
       sentTitle: "Test notification sent",
-      sentDescription: "Paseo handed the notification to the operating system.",
+      sentDescription: "Zencode handed the notification to the operating system.",
       sendFailedTitle: "Unable to send test notification",
     },
     hostSections: {
@@ -2148,14 +2148,14 @@ export const en = {
     metadataGeneration: {
       title: "Metadata generation",
       description:
-        "Choose the model Paseo uses for workspace titles, branch names, commit messages, and pull request drafts",
+        "Choose the model Zencode uses for workspace titles, branch names, commit messages, and pull request drafts",
       selection: "Model selection",
       automatic: "Automatic",
       preferred: "Manual",
-      automaticHint: "Paseo picks a fast available model",
-      preferredHint: "Choose the model Paseo uses",
+      automaticHint: "Zencode picks a fast available model",
+      preferredHint: "Choose the model Zencode uses",
       model: "Model",
-      fallbackHint: "If it is unavailable, Paseo falls back to another available model",
+      fallbackHint: "If it is unavailable, Zencode falls back to another available model",
       docs: "Docs",
       saveError: "Unable to update metadata generation",
     },
@@ -2165,7 +2165,7 @@ export const en = {
       browserData: {
         title: "Browser data",
         siteData: "Cookies and site data",
-        description: "Browser tabs share sign-ins and site data across Paseo.",
+        description: "Browser tabs share sign-ins and site data across Zencode.",
         clear: "Clear browser data",
         clearing: "Clearing...",
         confirmTitle: "Clear browser data?",
@@ -2190,7 +2190,7 @@ export const en = {
       serviceUrls: {
         options: {
           ask: "Ask",
-          inApp: "In Paseo",
+          inApp: "In Zencode",
           external: "External browser",
         },
       },
@@ -2274,7 +2274,7 @@ export const en = {
         label: "App updates",
         readyToInstall: "Ready to install: {{version}}",
         installTitle: "Install desktop update",
-        installMessage: "This updates Paseo on this computer",
+        installMessage: "This updates Zencode on this computer",
         installConfirm: "Install update",
         update: "Update",
         updateTo: "Update to {{version}}",
@@ -2528,11 +2528,11 @@ export const en = {
         uninstallFailed: "Unable to uninstall orchestration skills.",
         saveSelectionFailed: "Unable to save the orchestration skills selection.",
         updateAvailable: "Update available",
-        updateTitle: "Update Paseo skills?",
+        updateTitle: "Update Zencode skills?",
         updateFallback: "Sync bundled skills to this host.",
-        uninstallTitle: "Uninstall Paseo skills?",
+        uninstallTitle: "Uninstall Zencode skills?",
         uninstallMessage:
-          "Removes all Paseo orchestration skills from ~/.agents, ~/.claude, ~/.codex on this host.",
+          "Removes all Zencode orchestration skills from ~/.agents, ~/.claude, ~/.codex on this host.",
         choose: "Choose skills",
         chooseAll: "All skills",
         chooseAllHint: "Keep every bundled skill installed, including ones added later.",
@@ -2564,9 +2564,9 @@ export const en = {
         title: "Orchestration",
         unavailable: "Connect to this host to manage orchestration",
         enableTools: {
-          title: "Enable Paseo tools",
+          title: "Enable Zencode tools",
           hint: "Agents will be able to manage worktrees, agents and schedules",
-          accessibilityLabel: "Inject Paseo tools",
+          accessibilityLabel: "Inject Zencode tools",
         },
         systemPrompt: {
           title: "System prompt",
@@ -2669,15 +2669,15 @@ export const en = {
             "This host is not connected. Wait for it to come online before restarting.",
           offlineTitle: "Host offline",
           offlineMessage:
-            "This host is offline. Paseo reconnects automatically-wait until it's back online before restarting.",
+            "This host is offline. Zencode reconnects automatically-wait until it's back online before restarting.",
           requestFailedTitle: "Error",
           requestFailedMessage:
-            "Failed to send the restart request. Paseo reconnects automatically-try again once the host shows as online.",
+            "Failed to send the restart request. Zencode reconnects automatically-try again once the host shows as online.",
           dialogFailedMessage: "Unable to open the restart confirmation dialog.",
         },
         update: {
           desktopManagedHint:
-            "This daemon is managed by Paseo Desktop. Update Paseo Desktop on the host.",
+            "This daemon is managed by Zencode Desktop. Update Zencode Desktop on the host.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",
@@ -2838,7 +2838,7 @@ export const en = {
         newScript: "New script",
         editScript: "Edit {{name}}",
         runAsService: "Run as a service",
-        serviceHint: "Paseo supervises the process and assigns a port via $PASEO_PORT",
+        serviceHint: "Zencode supervises the process and assigns a port via $PASEO_PORT",
         actions: {
           add: "Add script",
           edit: "Edit",
@@ -2847,7 +2847,7 @@ export const en = {
       },
       metadata: {
         title: "Metadata generation",
-        info: "Project-specific instructions injected into the AI prompts Paseo uses to generate metadata - use them to enforce your team's conventions like branch naming, commit style, or PR format",
+        info: "Project-specific instructions injected into the AI prompts Zencode uses to generate metadata - use them to enforce your team's conventions like branch naming, commit style, or PR format",
         branchName: "Branch names",
         branchNamePlaceholder: "Prefix branches with feat/ or fix/, mb/ for personal branches",
         commitMessage: "Commit messages",

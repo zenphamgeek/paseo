@@ -4,6 +4,22 @@ Paseo is a mobile app for monitoring and controlling your local AI coding agents
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Antigravity, and Muse Code.
 
+---
+
+## ⚠️ IMMUTABLE SOVEREIGN RULE: STEALTH QUOTA, QUERY JITTER & PER-NODE EGRESS PROXY
+
+1. **Absolute Stealth Quota Invariant (Zero Outbound Telemetry)**:
+   - **Tất cả các con số và chỉ số liên quan đến Quotas (Google, Modal GPU, OpenCode)** luôn tuân thủ tuyệt đối **Stealth Mode**.
+   - Cấm tuyệt đối phát sinh bất kỳ outbound request nào tới các endpoint kiểm tra quota hay telemetry (`cloudcode-pa.googleapis.com`, `cloudaicompanion.googleapis.com`, `oauth2.googleapis.com`, Modal quota APIs, OpenCode scrapers).
+   - Toàn bộ chỉ số quota và reset countdown phải được đọc từ mô phỏng thụ động (Passive Simulation Accounting) qua Arouter (`/api/fleet/status`, `/api/fleet/quota`, `.passive_quota_ledger.json`).
+   - Tuyệt đối không bao giờ được vi phạm hay quên điều này khi xây dựng bất kỳ feature mới nào.
+2. **Mandatory Random Query Scattering & Behavioral Jitter**:
+   - Mọi truy vấn thăm dò hay giao tiếp node phải luôn được rải random temporal jitter (khoảng 2800ms - 5200ms cho polling, 800ms - 3200ms cho dispatch). Tuyệt đối không được gửi định kỳ theo chu kỳ cố định để chống nhận diện bot.
+3. **Strict Per-Node Egress Proxy Isolation (1:1 Node Proxy Assignment)**:
+   - Mỗi node bắt buộc phải đi qua một Egress Proxy riêng biệt (khác IP/Port trong pool 20128..20143). Không gom chung nhiều node vào một proxy slot. Internal endpoints (`localhost`, `127.0.0.1`, `*.modal.run`) được bảo toàn trong `NO_PROXY`.
+
+---
+
 ## Repository map
 
 This is an npm workspace monorepo:

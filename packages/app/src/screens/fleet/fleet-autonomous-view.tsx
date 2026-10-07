@@ -6,14 +6,20 @@ import {
   EditingTextInput as TextInput,
   type EditingTextInputHandle,
 } from "@/components/ui/text-input";
-import type { FleetClusterSummary } from "./types";
+import { FleetSwarmTopologyWidget } from "./fleet-swarm-topology-widget";
+import type { FleetClusterSummary, FleetNodeSummary } from "./types";
 
 interface FleetAutonomousViewProps {
   summary: FleetClusterSummary;
+  nodes?: FleetNodeSummary[];
   onToggleAutonomous: () => void;
 }
 
-export function FleetAutonomousView({ summary, onToggleAutonomous }: FleetAutonomousViewProps) {
+export function FleetAutonomousView({
+  summary,
+  nodes,
+  onToggleAutonomous,
+}: FleetAutonomousViewProps) {
   const [goalInput, setGoalInput] = useState("");
   const [isStartingGoal, setIsStartingGoal] = useState(false);
   const inputRef = useRef<EditingTextInputHandle | null>(null);
@@ -113,7 +119,7 @@ export function FleetAutonomousView({ summary, onToggleAutonomous }: FleetAutono
         <View style={styles.hudMetricsRow}>
           <View style={styles.hudMetricBox}>
             <Text style={styles.metricLabel}>Max Parallel Concurrency</Text>
-            <Text style={styles.metricVal}>8 Nodes</Text>
+            <Text style={styles.metricVal}>{summary.totalNodes || 14} Nodes</Text>
           </View>
           <View style={styles.hudMetricBox}>
             <Text style={styles.metricLabel}>Admission Control</Text>
@@ -129,6 +135,9 @@ export function FleetAutonomousView({ summary, onToggleAutonomous }: FleetAutono
           </View>
         </View>
       </View>
+
+      {/* ── LIVE INTERACTIVE SWARM TOPOLOGY WIDGET (9Router & AgyRouter Fusion) ── */}
+      <FleetSwarmTopologyWidget nodes={nodes} />
 
       {/* Goal Launch Control */}
       <View style={styles.goalCard}>

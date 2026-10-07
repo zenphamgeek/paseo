@@ -96,12 +96,13 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Create browser tab",
       description:
-        "Create a new Paseo browser tab in this agent's workspace on the most recently connected browser automation host, opened in the background without switching the user's view. Pass an http(s) URL or a scheme-less host URL, which is treated as http; the returned browserId is used by tab-scoped tools.",
+        "Create a new Paseo browser tab in this agent's workspace on the most recently connected browser automation host. If sidePanel is true, the tab opens in the right-hand Side Panel for live observation; otherwise it opens in the background without switching the user's view. Pass an http(s) URL or a scheme-less host URL, which is treated as http; the returned browserId is used by tab-scoped tools.",
       inputSchema: {
         url: BrowserHttpUrlInputSchema.optional(),
+        sidePanel: z.boolean().optional(),
       },
     },
-    async ({ url }) => {
+    async ({ url, sidePanel }) => {
       const context = resolveBrowserToolContext(options);
       const missingWorkspace = requireWorkspaceContext(context);
       if (missingWorkspace) {
@@ -113,10 +114,46 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
         ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
         command: {
           command: "new_tab",
-          args: url ? { url } : {},
+          args: {
+            ...(url ? { url } : {}),
+            ...(sidePanel !== undefined ? { sidePanel } : {}),
+          },
         },
       });
       return browserToolResult({ payload, context });
+    },
+  );
+
+  options.registerTool(
+    "browser_reveal_tab",
+    {
+      title: "Reveal browser tab in side panel",
+      description:
+        "Reveal an open Paseo browser tab in the right-hand Side Panel or focused pane so the user can observe live automation. Use browserId from browser_new_tab or browser_list_tabs.",
+      inputSchema: {
+        browserId: BrowserAutomationBrowserIdSchema,
+        sidePanel: z.boolean().optional(),
+      },
+    },
+    async ({ browserId, sidePanel }) => {
+      const context = resolveBrowserToolContext(options);
+      const missingWorkspace = requireWorkspaceContext(context);
+      if (missingWorkspace) {
+        return missingWorkspace;
+      }
+      const payload = await options.broker.execute({
+        agentId: context.agentId,
+        cwd: context.cwd,
+        ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+        command: {
+          command: "reveal_tab",
+          args: {
+            browserId,
+            ...(sidePanel !== undefined ? { sidePanel } : {}),
+          },
+        },
+      });
+      return browserToolResult({ payload, context: { ...context, browserId } });
     },
   );
 
@@ -886,9 +923,15 @@ function summarizeBrowserSuccess(
   }
 
   if (payload.result.command === "new_tab") {
+    const paneNotice = payload.result.sidePanel ? " in side panel" : "";
     return withDialogs(
-      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}. Use this browserId for tab-scoped browser tools.`,
+      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}${paneNotice}. Use this browserId for tab-scoped browser tools.`,
     );
+  }
+
+  if (payload.result.command === "reveal_tab") {
+    const paneNotice = payload.result.sidePanel ? "in side panel" : "in active view";
+    return withDialogs(`Revealed browser tab browserId=${payload.result.browserId} ${paneNotice}.`);
   }
 
   if (payload.result.command === "snapshot") {

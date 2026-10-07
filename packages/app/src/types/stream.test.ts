@@ -2304,4 +2304,46 @@ describe("notification timeline items", () => {
     ]);
     expect(new Set(state.map((item) => item.id)).size).toBe(state.length);
   });
+
+  it("preserves fleetExecution metadata on notification timeline items", () => {
+    const timestamp = new Date("2026-10-06T08:00:00.000Z");
+    const fleetExecution = {
+      isFleetMode: true,
+      orchestratorNode: "zenpham@gmail.com",
+      orchestratorModel: "gemini-2.5-pro",
+      workerNode: "binhthuong@gmail.com",
+      workerModel: "claude-opus-5-5-high",
+      tier: "pro" as const,
+      taskId: "fleet-task-123",
+      dispatchedAt: "2026-10-06T08:00:00.000Z",
+    };
+
+    const state = hydrateStreamState(
+      [
+        {
+          event: {
+            type: "timeline",
+            provider: "antigravity",
+            item: {
+              type: "notification",
+              level: "info",
+              message:
+                "[Fleet Mode Active] Orchestrator: zenpham@gmail.com (gemini-2.5-pro) ➔ Delegated Worker: binhthuong@gmail.com (claude-opus-5-5-high)",
+              fleetExecution,
+            },
+          },
+          timestamp,
+        },
+      ],
+      { source: "canonical" },
+    );
+
+    const notification = state[0];
+    expect(notification.kind).toBe("notification");
+    if (notification.kind === "notification") {
+      expect(notification.fleetExecution).toEqual(fleetExecution);
+      expect(notification.fleetExecution?.orchestratorNode).toBe("zenpham@gmail.com");
+      expect(notification.fleetExecution?.workerNode).toBe("binhthuong@gmail.com");
+    }
+  });
 });

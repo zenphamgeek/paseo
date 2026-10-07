@@ -255,11 +255,18 @@ function injectConnectionHint(
   req: Parameters<RequestHandler>[0],
   label: string,
 ): string {
-  const host = typeof req.headers.host === "string" ? req.headers.host : "";
-  const useTls = req.protocol === "https";
+  const rawHost = typeof req.headers.host === "string" ? req.headers.host : "";
+  const isTls =
+    req.protocol === "https" ||
+    req.headers["x-forwarded-proto"] === "https" ||
+    req.secure ||
+    (typeof req.headers["cf-visitor"] === "string" &&
+      req.headers["cf-visitor"].includes('"scheme":"https"'));
+  const port = isTls ? 443 : 80;
+  const host = rawHost.includes(":") ? rawHost : rawHost ? `${rawHost}:${port}` : "";
   const hint = {
     listen: host,
-    useTls,
+    useTls: isTls,
     label,
   };
   const script = `<script>window.__PASEO_INITIAL_DAEMON_CONNECTION__=${serializeInlineScriptJson(hint)}</script>`;

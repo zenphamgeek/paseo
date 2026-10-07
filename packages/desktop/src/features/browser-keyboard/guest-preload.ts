@@ -1,6 +1,70 @@
 import { ipcRenderer } from "electron";
 import type { BrowserKeyboardPolicy, BrowserShortcutPrefix } from "./policy.js";
 
+// --- Anti-Bot Stealth Cloak ---
+try {
+  // 1. Cloak navigator.webdriver
+  Object.defineProperty(navigator, "webdriver", {
+    get: () => undefined,
+    configurable: true,
+  });
+  if (Navigator.prototype && "webdriver" in Navigator.prototype) {
+    delete (Navigator.prototype as { webdriver?: boolean }).webdriver;
+  }
+
+  // 2. Emulate realistic window.chrome
+  const win = window as unknown as { chrome?: Record<string, unknown> };
+  if (!win.chrome) {
+    win.chrome = {};
+  }
+  if (!win.chrome.runtime) {
+    win.chrome.runtime = {
+      connect: () => {},
+      sendMessage: () => {},
+      id: undefined,
+    };
+  }
+  if (!win.chrome.csi) {
+    win.chrome.csi = () => ({
+      startE: Date.now(),
+      onloadT: Date.now() + 120,
+      pageT: 120,
+      tran: 15,
+    });
+  }
+  if (!win.chrome.loadTimes) {
+    win.chrome.loadTimes = () => ({
+      requestTime: Date.now() / 1000,
+      startLoadTime: Date.now() / 1000,
+      commitLoadTime: Date.now() / 1000 + 0.1,
+      finishDocumentLoadTime: Date.now() / 1000 + 0.2,
+      firstPaintTime: Date.now() / 1000 + 0.15,
+      firstPaintAfterLoadTime: 0,
+      navigationType: "Other",
+      wasFetchedViaSpdy: true,
+      wasNpnNegotiated: true,
+      npnNegotiatedProtocol: "h2",
+      wasAlternateProtocolAvailable: false,
+      connectionInfo: "h2",
+    });
+  }
+
+  // 3. Cloak navigator.languages
+  Object.defineProperty(navigator, "languages", {
+    get: () => ["en-US", "en"],
+    configurable: true,
+  });
+
+  // 4. Scrub automation variables
+  for (const key of Object.keys(window)) {
+    if (key.startsWith("cdc_") || key.includes("selenium") || key.includes("webdriver")) {
+      delete (window as unknown as Record<string, unknown>)[key];
+    }
+  }
+} catch {
+  // Silent fallback
+}
+
 const POLICY_CHANNEL = "paseo:browser-keyboard-policy";
 const POLICY_REQUEST_CHANNEL = "paseo:browser-keyboard-policy-request";
 const SHORTCUT_INPUT_CHANNEL = "paseo:browser-shortcut-input";

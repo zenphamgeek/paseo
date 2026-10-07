@@ -15,13 +15,15 @@ if [ -z "${PASEO_LOCAL_MODELS_DIR}" ]; then
 fi
 
 echo "══════════════════════════════════════════════════════"
-echo "  Paseo Dev Daemon"
+echo "  Zencode Dev Daemon"
 echo "══════════════════════════════════════════════════════"
 echo "  Home:    ${PASEO_HOME}"
 echo "  Models:  ${PASEO_LOCAL_MODELS_DIR}"
 echo "  Listen:  ${PASEO_LISTEN}"
 echo "══════════════════════════════════════════════════════"
 
+export PASEO_RELAY_ENABLED="${PASEO_RELAY_ENABLED:-false}"
+export ZENCODE_RELAY_ENABLED="${ZENCODE_RELAY_ENABLED:-false}"
 export PASEO_CORS_ORIGINS="${PASEO_CORS_ORIGINS:-*}"
 export PASEO_NODE_INSPECT="${PASEO_NODE_INSPECT:---inspect=0}"
 

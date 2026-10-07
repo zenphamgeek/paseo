@@ -441,7 +441,7 @@ it("emits one full-access warning per open, none on respawn, and one again on re
       severity: "warning",
       title: "Antigravity is running with full access",
       description:
-        "Antigravity's CLI cannot ask for permission when another app drives it, so Paseo starts it with --dangerously-skip-permissions. Every tool call, including shell commands, runs without asking.",
+        "Antigravity's CLI cannot ask for permission when another app drives it, so Zencode starts it with --dangerously-skip-permissions. Every tool call, including shell commands, runs without asking.",
     },
   };
   const opened = h.events.findIndex((event) => event.type === "session.opened");
@@ -615,7 +615,7 @@ describe("discovery", () => {
         colorTier: "dangerous",
         isUnattended: true,
         description:
-          "Antigravity cannot ask for permission when another app drives it. Paseo starts it with --dangerously-skip-permissions.",
+          "Antigravity cannot ask for permission when another app drives it. Zencode starts it with --dangerously-skip-permissions.",
       },
     ]);
   });

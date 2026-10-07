@@ -8,6 +8,8 @@ import {
 export * from "./types.js";
 export * from "./clef-upstream-client.js";
 export * from "./local-onnx-engine.js";
+export * from "./clef-hit-logger.js";
+export * from "./cloudflare-free-pool-router.js";
 
 /**
  * Zencode Unified Dual ONNX Engine

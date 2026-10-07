@@ -11,6 +11,7 @@ import { ensureAgentLoaded } from "./agent-loading.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
+import { dispatchFleetExecutionForConversation } from "../fleet/fleet-conversation-dispatcher.js";
 
 export type AgentUnarchiveController = Pick<AgentManager, "notifyAgentState" | "unarchiveSnapshot">;
 
@@ -324,6 +325,26 @@ export async function sendPromptToAgent(
 
   if (params.sessionMode) {
     await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
+  }
+
+  // Intercept Fleet Mode execution: route and log label in conversation
+  try {
+    const fleetDispatch = await dispatchFleetExecutionForConversation({
+      agentManager: params.agentManager,
+      agentId: params.agentId,
+      prompt: params.prompt,
+      mode: params.sessionMode,
+      runOptions: params.runOptions,
+      logger: params.logger,
+    });
+    if (fleetDispatch.isFleetMode) {
+      params.prompt = fleetDispatch.cleanPrompt;
+    }
+  } catch (fleetErr) {
+    params.logger.warn(
+      { err: fleetErr, agentId: params.agentId },
+      "Fleet mode intercept notice failed",
+    );
   }
 
   const runOptions = params.messageId

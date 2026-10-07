@@ -1,4 +1,5 @@
 import { promises as fs, type Dirent } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import type { Logger } from "pino";
@@ -315,23 +316,68 @@ export class AgentStorage {
 
   private async scanDisk(): Promise<StoredAgentRecord[]> {
     const records: StoredAgentRecord[] = [];
+    const scannedDirs = new Set<string>();
+    const dirsToScan = [this.baseDir];
+
+    // Resilience fallback: search across ~/.paseo, ~/.zencode, and local dev homes
+    // ensuring no conversation history is lost across environment changes or migrations
+    try {
+      const home = os.homedir();
+      const fallbackDirs = [
+        path.join(home, ".paseo", "agents"),
+        path.join(home, ".zencode", "agents"),
+        path.join(process.cwd(), ".dev", "paseo-home", "agents"),
+      ];
+      for (const fb of fallbackDirs) {
+        const resolved = path.resolve(fb);
+        if (!dirsToScan.some((d) => path.resolve(d) === resolved)) {
+          dirsToScan.push(fb);
+        }
+      }
+    } catch {
+      // ignore path resolution errors
+    }
+
+    for (const dir of dirsToScan) {
+      const resolved = path.resolve(dir);
+      if (scannedDirs.has(resolved)) continue;
+      scannedDirs.add(resolved);
+
+      const items = await this.scanDirectory(dir);
+      for (const { record, filePath } of items) {
+        if (!this.cache.has(record.id)) {
+          records.push(record);
+          this.cache.set(record.id, record);
+          this.indexOwner(record);
+          this.pathById.set(record.id, filePath);
+          this.addIndexedPath(record.id, filePath);
+        }
+      }
+    }
+
+    return records;
+  }
+
+  private async scanDirectory(
+    dir: string,
+  ): Promise<Array<{ record: StoredAgentRecord; filePath: string }>> {
     let entries: Dirent[] = [];
     try {
-      entries = await fs.readdir(this.baseDir, { withFileTypes: true });
+      entries = await fs.readdir(dir, { withFileTypes: true });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];
       }
-      throw error;
+      return [];
     }
 
     const rootRecordPaths = entries
       .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-      .map((entry) => path.join(this.baseDir, entry.name));
+      .map((entry) => path.join(dir, entry.name));
 
     const projectDirs = entries
       .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(this.baseDir, entry.name));
+      .map((entry) => path.join(dir, entry.name));
 
     const projectFileLists = await Promise.all(
       projectDirs.map(async (projectDir) => {
@@ -354,17 +400,9 @@ export class AgentStorage {
       }),
     );
 
-    for (const item of loaded) {
-      if (!item) continue;
-      const { record, filePath } = item;
-      records.push(record);
-      this.cache.set(record.id, record);
-      this.indexOwner(record);
-      this.pathById.set(record.id, filePath);
-      this.addIndexedPath(record.id, filePath);
-    }
-
-    return records;
+    return loaded.filter(
+      (item): item is { record: StoredAgentRecord; filePath: string } => item !== null,
+    );
   }
 
   private async readRecordFile(filePath: string): Promise<StoredAgentRecord | null> {

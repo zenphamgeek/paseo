@@ -1,6 +1,6 @@
 import { router, usePathname } from "expo-router";
 import { CalendarClock, Cpu, History, Plus, Search } from "lucide-react-native";
-import { memo, useCallback, useMemo, useRef, type ComponentType } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
@@ -177,10 +177,34 @@ function SidebarSchedulesRow({ onBeforeNavigate }: SidebarNavRowProps) {
 function SidebarFleetRow({ onBeforeNavigate }: SidebarNavRowProps) {
   const { t } = useTranslation();
   const pathname = usePathname();
+
+  const [isAdmin, setIsAdmin] = useState(true);
+
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      const role = window.localStorage?.getItem("zencode_user_role");
+      const token = window.localStorage?.getItem("zencode_access_token");
+      if (role && role !== "admin") {
+        setIsAdmin(false);
+      } else if (token && !token.startsWith("zen_live_admin_")) {
+        setIsAdmin(false);
+      } else {
+        setIsAdmin(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const handlePress = useCallback(() => {
     onBeforeNavigate?.();
     router.push(buildFleetRoute());
   }, [onBeforeNavigate]);
+
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <SidebarHeaderRow

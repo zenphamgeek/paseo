@@ -9,6 +9,7 @@ import type {
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { FleetExecutionMetadata } from "@getpaseo/protocol/fleet-types";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
 export type {
@@ -398,6 +399,7 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
+      fleetExecution?: FleetExecutionMetadata;
     }
   | CompactionTimelineItem
   | PluginTimelineItem;

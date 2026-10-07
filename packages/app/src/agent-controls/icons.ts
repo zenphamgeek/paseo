@@ -2,7 +2,9 @@ import type { ComponentType } from "react";
 import {
   Bot,
   Brain,
+  Cpu,
   ListTodo,
+  Network,
   Settings2,
   Shield,
   ShieldAlert,
@@ -27,6 +29,8 @@ export const PlanModeIcon = ListTodo;
 
 const MODE_ICONS: Record<string, AgentControlIcon> = {
   Bot,
+  Cpu,
+  Network,
   Shield,
   ShieldAlert,
   ShieldCheck,

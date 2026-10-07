@@ -49,15 +49,25 @@ export function isPaseoToolName(name: string): boolean {
     return (
       segments.length >= 3 &&
       segments[0] === "mcp" &&
-      (segments[1] === "paseo" || segments[1].startsWith("paseo_"))
+      (segments[1] === "paseo" ||
+        segments[1].startsWith("paseo_") ||
+        segments[1] === "zencode" ||
+        segments[1].startsWith("zencode_"))
     );
   }
   if (normalized.includes(".")) {
     const firstSegment = normalized.split(".")[0];
-    return firstSegment === "paseo" || firstSegment.startsWith("paseo_");
+    return (
+      firstSegment === "paseo" ||
+      firstSegment.startsWith("paseo_") ||
+      firstSegment === "zencode" ||
+      firstSegment.startsWith("zencode_")
+    );
   }
   return false;
 }
+
+export const isZencodeToolName = isPaseoToolName;
 
 export function getPaseoToolLeafName(name: string): string | null {
   const normalized = normalizeToolName(name);

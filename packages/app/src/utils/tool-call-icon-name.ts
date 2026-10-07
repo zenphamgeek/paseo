@@ -1,7 +1,7 @@
 import type { ToolCallDetail, ToolCallIconName } from "@getpaseo/protocol/agent-types";
 import { isPaseoToolName } from "@getpaseo/protocol/tool-name-normalization";
 
-export type ToolCallIcon = ToolCallIconName | "paseo";
+export type ToolCallIcon = ToolCallIconName | "paseo" | "zencode";
 
 const TOOL_DETAIL_ICON_NAMES: Record<ToolCallDetail["type"], ToolCallIcon> = {
   shell: "square_terminal",
@@ -32,7 +32,7 @@ export function resolveToolCallIconName(toolName: string, detail?: ToolCallDetai
     return "mic_vocal";
   }
   if (isPaseoToolName(lowerName)) {
-    return "paseo";
+    return "zencode";
   }
   if (lowerName === "task") {
     return "bot";

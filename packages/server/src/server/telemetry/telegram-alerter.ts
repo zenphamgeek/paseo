@@ -222,6 +222,40 @@ export class TelegramAlerter {
       },
     });
   }
+
+  public async sendConversationAlert(payload: {
+    conversationId: string;
+    conversationTitle?: string;
+    event: "completed" | "attention_needed" | "error";
+    summary?: string;
+  }): Promise<{ sent: boolean; reason?: string; messageId?: number }> {
+    const eventTitles: Record<string, string> = {
+      completed: "Task Completed",
+      attention_needed: "Human Attention Needed",
+      error: "Task Error Occurred",
+    };
+    const severityMap: Record<string, AlertSeverity> = {
+      completed: "resolved",
+      attention_needed: "warning",
+      error: "critical",
+    };
+
+    const windowSlot = Math.floor(Date.now() / 10_000);
+    const alertKey = `zencode:conv:${payload.conversationId}:${payload.event}:${windowSlot}`;
+
+    return this.dispatchAlert({
+      alertKey,
+      severity: severityMap[payload.event] || "info",
+      title: `${eventTitles[payload.event] || "Conversation Alert"} — ${payload.conversationTitle || payload.conversationId.slice(0, 8)}`,
+      source: "router",
+      evidence: {
+        conversationId: payload.conversationId,
+        title: payload.conversationTitle || "Untitled Conversation",
+        event: payload.event,
+        ...(payload.summary ? { summary: payload.summary.slice(0, 300) } : {}),
+      },
+    });
+  }
 }
 
 let alerterInstance: TelegramAlerter | null = null;

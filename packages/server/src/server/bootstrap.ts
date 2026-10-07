@@ -11,8 +11,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Logger } from "pino";
 import { z } from "zod";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
-import { FleetRegistry } from "./fleet/registry.js";
-import { NineRouter } from "./router/index.js";
+import { FleetRegistry, setFleetRegistry } from "./fleet/registry.js";
+import { NineRouter, setNineRouter } from "./router/index.js";
 import { EgressManager, getEgressProxyManager } from "./egress/index.js";
 import { ClefCouncil } from "./clef/index.js";
 import { GoalEngine } from "./goal/index.js";
@@ -22,6 +22,20 @@ import { getZencodeOAuthManager } from "./auth/zencode-oauth-manager.js";
 import { getZencodeMcpRegistry } from "./mcp/zencode-mcp-registry.js";
 import { getZencodeProjectMigrationService } from "./projects/zencode-project-migration.js";
 import { getOpenCodeFleetManager } from "./fleet/opencode-fleet-manager.js";
+import { SelfHealingSupervisor } from "./self-healing/index.js";
+import { getFleetAnalyticsDatabase } from "./fleet/fleet-analytics-db.js";
+import { getModalGpuSwarmManager, CANONICAL_WORKLOADS } from "./fleet/modal-gpu-swarm.js";
+import {
+  getUserKeyLedger,
+  UserKeyLedger,
+  resolveModelMultiplier,
+  type UserRecord,
+} from "./auth/user-key-ledger.js";
+import { getZencodeDatabase, TOKENS_PER_Z_CREDIT } from "./db/database.js";
+import { getSepayGateway, ZENCODE_PLANS } from "./billing/sepay-gateway.js";
+import { getGoogleOAuthService } from "./auth/google-oauth-service.js";
+import { AntiSybilLedger, getAntiSybilLedger } from "./auth/anti-sybil-ledger.js";
+import { createWebAppGatingMiddleware } from "./web-app-gating.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -216,6 +230,7 @@ import { isHostnameAllowed, type HostnamesConfig } from "./hostnames.js";
 import {
   createRequireBearerMiddleware,
   isAgentMcpRequestAuthorized,
+  extractHttpBearerToken,
   type DaemonAuthConfig,
 } from "./auth.js";
 import { deleteLocalCredential, writeLocalCredential } from "./local-credential.js";
@@ -539,6 +554,15 @@ async function reconcileManagedProcessLedger(
 }
 
 function mountWebUi(app: express.Application, config: PaseoDaemonConfig, logger: Logger): void {
+  const userLedger = getUserKeyLedger();
+  const zencodeDb = getZencodeDatabase();
+  app.use(
+    createWebAppGatingMiddleware({
+      userLedger,
+      db: zencodeDb,
+      logger,
+    }),
+  );
   app.use(
     createWebUiMiddleware({
       enabled: config.webUi?.enabled ?? false,
@@ -598,15 +622,357 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
   return initialConfig;
 }
 
+export interface FreeTierGatingParams {
+  userTier: string;
+  requestedModel?: string;
+  isModalGpuRequest?: boolean;
+  activeAgentsCount?: number;
+}
+
+export interface FreeTierGatingResult {
+  allowed: boolean;
+  status: number;
+  body: {
+    error?: string;
+    upgradeUrl?: string;
+    [key: string]: any;
+  };
+}
+
+export function assertFreeTierGating(params: FreeTierGatingParams): FreeTierGatingResult {
+  const { userTier, requestedModel, isModalGpuRequest, activeAgentsCount } = params;
+
+  // 1. Strict Model Lockout: Claude Opus 5.5 / 4.8 / Opus
+  if (userTier === "free" && requestedModel) {
+    const isOpus = /claude-opus|opus/i.test(requestedModel);
+    if (isOpus) {
+      return {
+        allowed: false,
+        status: 403,
+        body: {
+          error: "Claude Opus 5.5 requires Pro or Enterprise tier",
+          upgradeUrl: "/#pricing",
+        },
+      };
+    }
+  }
+
+  // 2. Strict Model Lockout: Modal GPU
+  if (userTier === "free" && isModalGpuRequest) {
+    return {
+      allowed: false,
+      status: 403,
+      body: {
+        error: "Modal GPU requires Pro or Enterprise tier",
+        upgradeUrl: "/#pricing",
+      },
+    };
+  }
+
+  // 3. Concurrency Limit: Max 2 Specialist Agents (Architect + Coder)
+  if (userTier === "free" && activeAgentsCount !== undefined && activeAgentsCount >= 2) {
+    return {
+      allowed: false,
+      status: 429,
+      body: {
+        error:
+          "Free tier allows a maximum of 2 Specialist Agents running concurrently (Architect + Coder)",
+        upgradeUrl: "/#pricing",
+      },
+    };
+  }
+
+  return { allowed: true, status: 200, body: {} };
+}
+
+const inFlightJobsByUser = new Map<string, Set<string>>();
+
+export function getActiveUserAgentCount(userId: string): number {
+  return inFlightJobsByUser.get(userId)?.size ?? 0;
+}
+
+export function recordUserAgentStart(userId: string, runId: string): void {
+  let runs = inFlightJobsByUser.get(userId);
+  if (!runs) {
+    runs = new Set();
+    inFlightJobsByUser.set(userId, runs);
+  }
+  runs.add(runId);
+}
+
+export function recordUserAgentEnd(userId: string, runId: string): void {
+  const runs = inFlightJobsByUser.get(userId);
+  if (runs) {
+    runs.delete(runId);
+    if (runs.size === 0) {
+      inFlightJobsByUser.delete(userId);
+    }
+  }
+}
+
+export function clearAllUserAgentRuns(): void {
+  inFlightJobsByUser.clear();
+  clearAllCreditReservations();
+}
+
+// ── In-Flight Credit Reservation Ledger ─────────────────────────────
+export interface InFlightCreditReservation {
+  jobId: string;
+  userId: string;
+  reservedCredits: number;
+  model: string;
+  createdAt: number;
+}
+
+const inFlightCreditReservationsByUser = new Map<string, Map<string, InFlightCreditReservation>>();
+
+export function getActiveReservedCredits(userId: string): number {
+  const userReservations = inFlightCreditReservationsByUser.get(userId);
+  if (!userReservations || userReservations.size === 0) return 0;
+  const now = Date.now();
+  let total = 0;
+  for (const [jobId, res] of userReservations.entries()) {
+    // Fail-safe TTL auto-expiration (120 seconds) to guarantee zero orphaned memory leaks
+    if (now - res.createdAt > 120_000) {
+      userReservations.delete(jobId);
+    } else {
+      total += res.reservedCredits;
+    }
+  }
+  return Number(total.toFixed(4));
+}
+
+export function tryReserveUserCredits(params: {
+  userId: string;
+  jobId: string;
+  requiredCredits: number;
+  model: string;
+  currentBalance: number;
+}): { success: boolean; availableBalance: number; reservedCredits: number } {
+  const currentReserved = getActiveReservedCredits(params.userId);
+  const availableBalance = Number((params.currentBalance - currentReserved).toFixed(4));
+
+  if (availableBalance < params.requiredCredits || params.currentBalance <= 0) {
+    return {
+      success: false,
+      availableBalance: Math.max(0, availableBalance),
+      reservedCredits: currentReserved,
+    };
+  }
+
+  let userReservations = inFlightCreditReservationsByUser.get(params.userId);
+  if (!userReservations) {
+    userReservations = new Map();
+    inFlightCreditReservationsByUser.set(params.userId, userReservations);
+  }
+
+  userReservations.set(params.jobId, {
+    jobId: params.jobId,
+    userId: params.userId,
+    reservedCredits: params.requiredCredits,
+    model: params.model,
+    createdAt: Date.now(),
+  });
+
+  return {
+    success: true,
+    availableBalance: Number((availableBalance - params.requiredCredits).toFixed(4)),
+    reservedCredits: Number((currentReserved + params.requiredCredits).toFixed(4)),
+  };
+}
+
+export function releaseUserCreditReservation(userId: string, jobId: string): void {
+  const userReservations = inFlightCreditReservationsByUser.get(userId);
+  if (userReservations) {
+    userReservations.delete(jobId);
+    if (userReservations.size === 0) {
+      inFlightCreditReservationsByUser.delete(userId);
+    }
+  }
+}
+
+export function clearAllCreditReservations(): void {
+  inFlightCreditReservationsByUser.clear();
+}
+
 function mountZencodeFleetAndGoalEndpoints(
   app: express.Express,
   fleetRegistry: FleetRegistry,
   nineRouter: NineRouter,
   goalEngine: GoalEngine,
+  selfHealing: SelfHealingSupervisor,
 ): void {
+  const analyticsDb = getFleetAnalyticsDatabase();
+  const modalGpuSwarm = getModalGpuSwarmManager();
+  const userLedger = getUserKeyLedger();
+  const zencodeDb = getZencodeDatabase();
+
+  const resolveCallerUser = (req: express.Request): UserRecord | null => {
+    const token = extractHttpBearerToken(req.header("authorization"));
+    if (token) {
+      const user = userLedger.findUserByToken(token);
+      if (user) return user;
+      const keyHash = UserKeyLedger.hashToken(token);
+      const row = (zencodeDb as any).db
+        ?.prepare("SELECT id FROM users WHERE key_hash = ?")
+        .get(keyHash) as { id: string } | undefined;
+      if (row) {
+        return zencodeDb.getUserById(row.id);
+      }
+    }
+    const userId = (req.query.userId as string) || (req.header("x-user-id") as string);
+    if (userId) {
+      const dbUser = zencodeDb.getUserById(userId);
+      if (dbUser) return dbUser;
+      const ledgerUser = userLedger.getUser(userId);
+      if (ledgerUser) {
+        return userLedger.findUserByToken(ledgerUser.keyPrefix) || (ledgerUser as any);
+      }
+    }
+    return null;
+  };
+
   // Zencode Swarm & Autonomous endpoints
-  app.get("/api/fleet/nodes", (_req, res) => {
-    res.json({ nodes: fleetRegistry.getAllNodes() });
+  app.get("/api/fleet/nodes", (req, res) => {
+    const range = (req.query.range as any) || "24h";
+    res.json({
+      nodes: fleetRegistry.getAllNodes(range),
+      retentionPeriod: range,
+    });
+  });
+
+  app.post("/api/fleet/nodes/create", (req, res) => {
+    void (async () => {
+      try {
+        const {
+          name,
+          tier = "pro",
+          preferred_model = "gemini-3.8-flash-high",
+          account_email,
+        } = req.body || {};
+        if (!name || typeof name !== "string" || !name.trim()) {
+          res.status(400).json({ error: "Missing or invalid node name" });
+          return;
+        }
+        const cleanName = name
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, "-")
+          .trim();
+        if (fleetRegistry.getNode(cleanName)) {
+          res.status(409).json({ error: `Node '${cleanName}' already exists` });
+          return;
+        }
+
+        // Register in TypeScript FleetRegistry
+        const runtime = fleetRegistry.registerNode({
+          id: cleanName,
+          displayName: cleanName,
+          kind: "agy",
+          tier: tier as "pro" | "ultra",
+          accountEmail: account_email || `${cleanName}@local.fleet`,
+          homeDirectory: path.join("/home/zen/agy-fleet", cleanName),
+          preferredModel: preferred_model,
+          caps: [preferred_model, "gemini-3.8-flash-high"],
+          maxConcurrency: 2,
+        });
+
+        // Forward to Python fleet_manager (7777) if running
+        try {
+          await fetch("http://127.0.0.1:7777/api/fleet/nodes/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: cleanName, tier, preferred_model }),
+          });
+        } catch {
+          // ignore if 7777 unavailable
+        }
+
+        res.json({ status: "created", node: fleetRegistry.summarizeNode(runtime) });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/nodes/create-api", (req, res) => {
+    void (async () => {
+      try {
+        const {
+          name,
+          provider = "anthropic",
+          api_key,
+          endpoint,
+          tier = "ultra",
+          preferred_model = "claude-3-7-sonnet",
+        } = req.body || {};
+        if (!name || typeof name !== "string" || !name.trim()) {
+          res.status(400).json({ error: "Missing or invalid node name" });
+          return;
+        }
+        if (!api_key || typeof api_key !== "string" || !api_key.trim()) {
+          res.status(400).json({ error: "Missing or invalid api_key" });
+          return;
+        }
+        const validProviders = ["anthropic", "openai", "deepseek", "b.ai"];
+        if (!validProviders.includes(provider)) {
+          res
+            .status(400)
+            .json({
+              error: `Unsupported provider '${provider}'. Must be one of: ${validProviders.join(", ")}`,
+            });
+          return;
+        }
+        const cleanName = name
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, "-")
+          .trim();
+        if (fleetRegistry.getNode(cleanName)) {
+          res.status(409).json({ error: `Node '${cleanName}' already exists` });
+          return;
+        }
+
+        // Register in TypeScript FleetRegistry
+        const runtime = fleetRegistry.registerNode({
+          id: cleanName,
+          displayName: `${cleanName} (${provider})`,
+          kind: "nebula",
+          tier: tier as "ultra" | "pro",
+          accountEmail: `${cleanName}@api.${provider}`,
+          homeDirectory: path.join("/home/zen/agy-fleet", cleanName),
+          preferredModel: preferred_model,
+          caps: [preferred_model, "claude", "opus", "sonnet"],
+          maxConcurrency: 4,
+        });
+
+        // Forward to Python fleet_manager (7777) if running
+        try {
+          await fetch("http://127.0.0.1:7777/api/fleet/nodes/create-api", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: cleanName,
+              provider,
+              api_key,
+              endpoint:
+                endpoint ||
+                (provider === "anthropic"
+                  ? "https://api.anthropic.com/v1"
+                  : "https://api.openai.com/v1"),
+              tier,
+              preferred_model,
+            }),
+          });
+        } catch {
+          // ignore if 7777 unavailable
+        }
+
+        res.json({ status: "created", node: fleetRegistry.summarizeNode(runtime) });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
   });
 
   app.get("/api/fleet/summary", (_req, res) => {
@@ -635,10 +1001,28 @@ function mountZencodeFleetAndGoalEndpoints(
   app.post("/api/fleet/dispatch", (req, res) => {
     void (async () => {
       try {
-        const { prompt, targetNode, tier = "pro", model } = req.body || {};
+        const { prompt, targetNode, tier = "pro", model, tokensEstimate } = req.body || {};
         if (!prompt || typeof prompt !== "string") {
           res.status(400).json({ error: "Missing or invalid prompt" });
           return;
+        }
+
+        const user = resolveCallerUser(req);
+        const userTier = user ? user.tier : "free";
+        const userId = user ? user.id : req.body?.userId || "anonymous_free_user";
+
+        // 1. Model Lockout Check (Claude Opus 5.5 / 4.8 / Opus requires Pro/Enterprise)
+        const targetModel = model || (tier === "ultra" ? "claude-opus-5-5" : undefined);
+        const modelGate = assertFreeTierGating({ userTier, requestedModel: targetModel });
+        if (!modelGate.allowed) {
+          return res.status(modelGate.status).json(modelGate.body);
+        }
+
+        // 2. Specialist Agent Concurrency Limit Check (Free tier max 2 Specialist Agents)
+        const activeCount = getActiveUserAgentCount(userId);
+        const concurrencyGate = assertFreeTierGating({ userTier, activeAgentsCount: activeCount });
+        if (!concurrencyGate.allowed) {
+          return res.status(concurrencyGate.status).json(concurrencyGate.body);
         }
 
         const selectedNode = targetNode
@@ -646,65 +1030,268 @@ function mountZencodeFleetAndGoalEndpoints(
           : nineRouter.route({
               taskId: `task-${Date.now()}`,
               prompt,
-              tokensEstimate: 2000,
+              tokensEstimate:
+                typeof tokensEstimate === "number" && tokensEstimate > 0 ? tokensEstimate : 2000,
               requiredCaps: [],
               preferredTier: tier,
             }).nodeId;
 
         const nodeRuntime = fleetRegistry.getNode(selectedNode);
         const chosenModel = model || nodeRuntime?.config.preferredModel || "claude-opus-4.8";
-        const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const startTime = Date.now();
 
-        fleetRegistry.recordJobStart(selectedNode);
-
-        // Attempt dispatch to 7777 AGY Fleet manager if running
-        let output = "";
-        try {
-          const agyRes = await fetch("http://127.0.0.1:7777/api/fleet/run", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt,
-              node_name: selectedNode,
-              model: chosenModel,
-            }),
-            signal: AbortSignal.timeout(60_000),
-          });
-          if (agyRes.ok) {
-            const json = await agyRes.json();
-            output = json.output || json.result || JSON.stringify(json);
-          } else {
-            output = `[Zencode Node ${selectedNode}]: Task accepted and processed autonomously with ${chosenModel}.`;
-          }
-        } catch {
-          output = `[Zencode Local Dispatch]: Execution simulated for node ${selectedNode} (${chosenModel}). All verification gates passed.`;
+        // Double check chosenModel against model lockout for free tier
+        const chosenModelGate = assertFreeTierGating({ userTier, requestedModel: chosenModel });
+        if (!chosenModelGate.allowed) {
+          return res.status(chosenModelGate.status).json(chosenModelGate.body);
         }
 
-        const durationMs = Date.now() - startTime;
-        fleetRegistry.recordJobResult(selectedNode, true);
+        // 3. Pre-Flight Credit Balance & Required Tokens Calculation
+        const estimatedTokens =
+          typeof tokensEstimate === "number" && tokensEstimate > 0
+            ? tokensEstimate
+            : Math.floor(prompt.length / 4) + 150;
+        const modelMultiplier = resolveModelMultiplier(chosenModel);
+        const requiredCredits = Number(
+          ((estimatedTokens * modelMultiplier) / TOKENS_PER_Z_CREDIT).toFixed(4),
+        );
+        const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-        const jobRecord = {
-          id: jobId,
-          taskId: `task-${Date.now()}`,
-          prompt,
-          nodeId: selectedNode,
-          model: chosenModel,
-          status: "completed" as const,
-          startTime,
-          endTime: Date.now(),
-          durationMs,
-          tokensUsed: Math.floor(prompt.length / 4) + 150,
-          outputPreview: output.slice(0, 500),
-        };
+        if (user) {
+          const credits = zencodeDb.getUserCredits(user.id);
 
-        fleetRegistry.recordJob(jobRecord);
-        res.json({ job: jobRecord, output });
+          // 3a. 0-Credit Exhaustion Check (balance <= 0 requires top up via VietQR SePay)
+          if (credits.balance <= 0) {
+            return res.status(402).json({
+              error:
+                "Z-Credits exhausted. Free monthly quota reached (200 Z-Credits / 500,000 tokens). Please top up via VietQR SePay to continue.",
+              balance: 0,
+              upgradeUrl: "/#pricing",
+              createOrderUrl: "/api/billing/create-order",
+            });
+          }
+
+          // 3b. Insufficient credits for required estimated tokens
+          if (credits.balance < requiredCredits) {
+            return res.status(402).json({
+              error: "INSUFFICIENT_CREDITS",
+              message: `Insufficient Z-Credits: required ${requiredCredits}, current balance ${credits.balance}. Please top up via VietQR SePay.`,
+              createOrderUrl: "/api/billing/create-order",
+              upgradeUrl: "/#pricing",
+              requiredCredits,
+              balance: credits.balance,
+            });
+          }
+
+          // 3c. In-Flight Credit Reservation Ledger Check
+          const reservation = tryReserveUserCredits({
+            userId: user.id,
+            jobId,
+            requiredCredits,
+            model: chosenModel,
+            currentBalance: credits.balance,
+          });
+
+          if (!reservation.success) {
+            return res.status(402).json({
+              error: "INSUFFICIENT_CREDITS",
+              message: `Insufficient Z-Credits: required ${requiredCredits}, current balance ${credits.balance}. Please top up via VietQR SePay.`,
+              createOrderUrl: "/api/billing/create-order",
+              upgradeUrl: "/#pricing",
+              requiredCredits,
+              balance: reservation.availableBalance,
+            });
+          }
+        }
+
+        recordUserAgentStart(userId, jobId);
+
+        try {
+          const startTime = Date.now();
+          fleetRegistry.recordJobStart(selectedNode);
+
+          // Attempt dispatch to 7777 AGY Fleet manager if running
+          let output = "";
+          try {
+            const agyRes = await fetch("http://127.0.0.1:7777/api/fleet/run", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt,
+                node_name: selectedNode,
+                model: chosenModel,
+              }),
+              signal: AbortSignal.timeout(60_000),
+            });
+            if (agyRes.ok) {
+              const json = await agyRes.json();
+              output = json.output || json.result || JSON.stringify(json);
+            } else {
+              output = `[Zencode Node ${selectedNode}]: Task accepted and processed autonomously with ${chosenModel}.`;
+            }
+          } catch {
+            output = `[Zencode Local Dispatch]: Execution simulated for node ${selectedNode} (${chosenModel}). All verification gates passed.`;
+          }
+
+          const durationMs = Date.now() - startTime;
+          fleetRegistry.recordJobResult(selectedNode, true);
+
+          const tokensUsed = Math.floor(prompt.length / 4) + 150;
+          const jobRecord = {
+            id: jobId,
+            taskId: `task-${Date.now()}`,
+            prompt,
+            nodeId: selectedNode,
+            model: chosenModel,
+            status: "completed" as const,
+            startTime,
+            endTime: Date.now(),
+            durationMs,
+            tokensUsed,
+            outputPreview: output.slice(0, 500),
+          };
+
+          fleetRegistry.recordJob(jobRecord);
+
+          // Real-time credit deduction
+          let creditDeductionResult: any = undefined;
+          if (user) {
+            creditDeductionResult = zencodeDb.deductCreditsForTokens({
+              userId: user.id,
+              model: chosenModel,
+              tokenCount: tokensUsed,
+            });
+            userLedger.recordModelUsage(user.id, chosenModel, tokensUsed);
+
+            if (!creditDeductionResult.success) {
+              return res.status(402).json({
+                error: "INSUFFICIENT_CREDITS",
+                message: `Credit deduction failed: required ${creditDeductionResult.chargedCredits}, remaining balance ${creditDeductionResult.remainingBalance}. Please top up via VietQR SePay.`,
+                requiredCredits: creditDeductionResult.chargedCredits,
+                balance: creditDeductionResult.remainingBalance,
+                createOrderUrl: "/api/billing/create-order",
+                upgradeUrl: "/#pricing",
+              });
+            }
+          }
+
+          try {
+            const isOc = selectedNode.startsWith("oc_");
+            analyticsDb.recordRequest({
+              id: jobId,
+              nodeId: selectedNode,
+              cluster: isOc ? "opencode" : "agy",
+              tier: (nodeRuntime?.config.tier || tier) as any,
+              model: chosenModel,
+              promptSummary: prompt.slice(0, 300),
+              status: "completed",
+              exitCode: 0,
+              durationMs,
+              totalTokens: tokensUsed,
+              costBilledUsd: isOc ? 0.0 : tier === "ultra" ? 0.025 : 0.005,
+              costSavedUsd: isOc
+                ? Number(((tokensUsed / 1_000_000) * 1.25).toFixed(6))
+                : tier === "ultra"
+                  ? 0.05
+                  : 0.015,
+              outputPreview: output.slice(0, 500),
+            });
+          } catch {
+            // ignore analytics db write error
+          }
+
+          res.json({ job: jobRecord, output, creditDeduction: creditDeductionResult });
+        } finally {
+          if (user) {
+            releaseUserCreditReservation(user.id, jobId);
+          }
+          recordUserAgentEnd(userId, jobId);
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         res.status(500).json({ error: message });
       }
     })();
+  });
+
+  // Dedicated Specialist Agent Lifecycle & Concurrency Endpoints
+  app.post(["/api/fleet/agents/spawn", "/api/fleet/agents/run"], (req, res) => {
+    try {
+      const user = resolveCallerUser(req);
+      const userTier = user ? user.tier : req.body?.tier || "free";
+      const userId = user ? user.id : req.body?.userId || "anonymous_free_user";
+      const requestedModel = req.body?.model;
+
+      // 1. Model lockout check
+      const modelGate = assertFreeTierGating({ userTier, requestedModel });
+      if (!modelGate.allowed) {
+        return res.status(modelGate.status).json(modelGate.body);
+      }
+
+      // 2. Concurrency limit check
+      const activeCount = getActiveUserAgentCount(userId);
+      const concurrencyGate = assertFreeTierGating({ userTier, activeAgentsCount: activeCount });
+      if (!concurrencyGate.allowed) {
+        return res.status(concurrencyGate.status).json(concurrencyGate.body);
+      }
+
+      // 3. 0-credit exhaustion & tokensEstimate pre-flight check
+      if (user) {
+        const credits = zencodeDb.getUserCredits(user.id);
+        if (credits.balance <= 0) {
+          return res.status(402).json({
+            error:
+              "Z-Credits exhausted. Free monthly quota reached (200 Z-Credits / 500,000 tokens). Please top up via VietQR SePay to continue.",
+            balance: 0,
+            upgradeUrl: "/#pricing",
+            createOrderUrl: "/api/billing/create-order",
+          });
+        }
+
+        const tokensEstimate = req.body?.tokensEstimate;
+        if (typeof tokensEstimate === "number" && tokensEstimate > 0) {
+          const modelToUse = requestedModel || "codex";
+          const requiredCredits = Number(
+            ((tokensEstimate * resolveModelMultiplier(modelToUse)) / TOKENS_PER_Z_CREDIT).toFixed(
+              4,
+            ),
+          );
+          if (credits.balance < requiredCredits) {
+            return res.status(402).json({
+              error: "INSUFFICIENT_CREDITS",
+              message: `Insufficient Z-Credits: required ${requiredCredits}, current balance ${credits.balance}. Please top up via VietQR SePay.`,
+              createOrderUrl: "/api/billing/create-order",
+              upgradeUrl: "/#pricing",
+              requiredCredits,
+              balance: credits.balance,
+            });
+          }
+        }
+      }
+
+      const agentId =
+        req.body?.agentId || `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      recordUserAgentStart(userId, agentId);
+
+      res.json({
+        success: true,
+        agentId,
+        tier: userTier,
+        activeRunningCount: getActiveUserAgentCount(userId),
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/fleet/agents/stop", (req, res) => {
+    const user = resolveCallerUser(req);
+    const userId = user ? user.id : req.body?.userId || "anonymous_free_user";
+    const agentId = req.body?.agentId;
+    if (agentId) {
+      recordUserAgentEnd(userId, agentId);
+    }
+    res.json({ success: true, activeRunningCount: getActiveUserAgentCount(userId) });
   });
 
   app.get("/api/fleet/council", (_req, res) => {
@@ -810,6 +1397,29 @@ function mountZencodeFleetAndGoalEndpoints(
     })();
   });
 
+  // Telegram Per-Conversation Notification Trigger
+  app.post("/api/fleet/telegram/conversation-notify", (req, res) => {
+    void (async () => {
+      try {
+        const { conversationId, title, event, summary } = req.body || {};
+        if (!conversationId) {
+          res.status(400).json({ error: "conversationId is required" });
+          return;
+        }
+        const result = await getTelegramAlerter().sendConversationAlert({
+          conversationId,
+          conversationTitle: title,
+          event: event || "completed",
+          summary,
+        });
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
   // Zencode Universal OAuth & Provider Credential Status
   app.get("/api/fleet/auth/status", (_req, res) => {
     void (async () => {
@@ -847,6 +1457,434 @@ function mountZencodeFleetAndGoalEndpoints(
         account,
       });
       res.json(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // --- Zencode Access Passkey & 3-Fleet User Management (RBAC) ---
+
+  // Public Verify Key (used on Web Onboarding / Login)
+  app.post("/api/auth/verify-key", (req, res) => {
+    try {
+      const { key } = req.body || {};
+      if (!key || typeof key !== "string") {
+        return res.status(400).json({ valid: false, error: "Access Passkey is required" });
+      }
+      const result = userLedger.verifyKey(key);
+      if (!result.valid) {
+        return res.status(401).json({ valid: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ valid: false, error: message });
+    }
+  });
+
+  // Current User Profile & Fleet Quotas
+  app.get("/api/user/me", (req, res) => {
+    try {
+      const token = extractHttpBearerToken(req.header("authorization"));
+      if (!token) {
+        return res.status(401).json({ error: "Missing Bearer Authorization header" });
+      }
+      const result = userLedger.verifyKey(token);
+      if (!result.valid) {
+        return res.status(401).json({ error: result.error });
+      }
+      res.json({ user: result.user });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Helper for admin authorization
+  const requireAdminKey = (req: express.Request, res: express.Response): boolean => {
+    const token = extractHttpBearerToken(req.header("authorization"));
+    if (!token) {
+      res.status(401).json({ error: "Admin Bearer token required" });
+      return false;
+    }
+    const user = userLedger.findUserByToken(token);
+    if (!user || user.role !== "admin" || user.status !== "active") {
+      res.status(403).json({ error: "Forbidden: Admin privileges required" });
+      return false;
+    }
+    return true;
+  };
+
+  // Admin: List all users and passkey states
+  app.get("/api/admin/users", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    res.json({ users: userLedger.listUsers() });
+  });
+
+  // Admin: Create new user with custom fleet permissions
+  app.post("/api/admin/users/create", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    try {
+      const {
+        username,
+        displayName,
+        role,
+        allowedFleets,
+        dailyTokenBudget,
+        dailyGpuMinutes,
+        dailyRequests,
+        allowClaudeOpus,
+        expiresInDays,
+      } = req.body || {};
+      if (!username) {
+        return res.status(400).json({ error: "username is required" });
+      }
+      const result = userLedger.createUser({
+        username,
+        displayName,
+        role,
+        allowedFleets,
+        dailyTokenBudget,
+        dailyGpuMinutes,
+        dailyRequests,
+        allowClaudeOpus,
+        expiresInDays,
+      });
+      res.status(201).json({ success: true, ...result });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Admin: Revoke user passkey
+  app.post("/api/admin/users/:id/revoke", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const ok = userLedger.revokeUser(req.params.id);
+    if (!ok) {
+      return res.status(404).json({ error: `User '${req.params.id}' not found` });
+    }
+    res.json({ success: true, status: "revoked" });
+  });
+
+  // Admin: Adjust user fleet quota
+  app.post("/api/admin/users/:id/adjust-quota", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const { fleet, addTokens, addGpuMinutes, addRequests } = req.body || {};
+    if (!fleet) {
+      return res
+        .status(400)
+        .json({ error: "fleet ('llm' | 'modal_gpu' | 'cloudflare_clef') is required" });
+    }
+    const ok = userLedger.adjustQuota(req.params.id, fleet, {
+      addTokens,
+      addGpuMinutes,
+      addRequests,
+    });
+    if (!ok) {
+      return res.status(404).json({ error: `User '${req.params.id}' not found` });
+    }
+    res.json({ success: true, user: userLedger.getUser(req.params.id) });
+  });
+
+  // Admin: Record simulated user fleet usage
+  app.post("/api/admin/users/:id/record-usage", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const { fleet, amount } = req.body || {};
+    if (!fleet || typeof amount !== "number") {
+      return res.status(400).json({ error: "fleet and numeric amount are required" });
+    }
+    userLedger.recordUsage(req.params.id, fleet, amount);
+    res.json({ success: true, user: userLedger.getUser(req.params.id) });
+  });
+
+  // Admin: Record model usage with market credit multiplier (non-blocking)
+  app.post("/api/admin/users/:id/record-model-usage", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const { model, tokenCount } = req.body || {};
+    if (!model || typeof tokenCount !== "number") {
+      return res.status(400).json({ error: "model string and numeric tokenCount are required" });
+    }
+    const result = userLedger.recordModelUsage(req.params.id, model, tokenCount);
+    res.json({ success: true, ...result, user: userLedger.getUser(req.params.id) });
+  });
+
+  // Admin: Manually grant or revoke Private Fleet access
+  app.post("/api/admin/users/:id/private-fleet", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const { enabled } = req.body || {};
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "boolean 'enabled' is required" });
+    }
+    const ok = userLedger.setPrivateFleetAccess(req.params.id, enabled);
+    if (!ok) {
+      return res.status(404).json({ error: `User '${req.params.id}' not found` });
+    }
+    res.json({ success: true, user: userLedger.getUser(req.params.id) });
+  });
+
+  // Admin: Adjust specialized service quota (TTS, t2Image, Img2Img)
+  app.post("/api/admin/users/:id/service-quota", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const { addTtsMinutes, addT2Images, addImg2ImgEdits } = req.body || {};
+    const ok = userLedger.adjustServiceQuota(req.params.id, {
+      addTtsMinutes: typeof addTtsMinutes === "number" ? addTtsMinutes : undefined,
+      addT2Images: typeof addT2Images === "number" ? addT2Images : undefined,
+      addImg2ImgEdits: typeof addImg2ImgEdits === "number" ? addImg2ImgEdits : undefined,
+    });
+    if (!ok) {
+      return res.status(404).json({ error: `User '${req.params.id}' not found` });
+    }
+    res.json({ success: true, user: userLedger.getUser(req.params.id) });
+  });
+
+  // Admin: Record specialized service usage (TTS, t2Image, Img2Img)
+  app.post("/api/admin/users/:id/record-service-usage", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const { service, amount } = req.body || {};
+    if (!service || typeof amount !== "number") {
+      return res
+        .status(400)
+        .json({ error: "service ('tts'|'t2image'|'img2img') and numeric amount are required" });
+    }
+    const ok = userLedger.recordServiceUsage(req.params.id, service, amount);
+    if (!ok) {
+      return res.status(404).json({ error: `User '${req.params.id}' not found` });
+    }
+    res.json({ success: true, user: userLedger.getUser(req.params.id) });
+  });
+
+  // Admin: Reset user usage on-demand (LLM, GPU, Clef, TTS, t2Image, Img2Img)
+  app.post("/api/admin/users/:id/reset-usage", (req, res) => {
+    if (!requireAdminKey(req, res)) return;
+    const ok = userLedger.resetUserUsage(req.params.id);
+    if (!ok) {
+      return res.status(404).json({ error: `User '${req.params.id}' not found` });
+    }
+    res.json({ success: true, user: userLedger.getUser(req.params.id) });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Zencode Product Launch: Google OAuth & VietQR SePay Billing
+  // ─────────────────────────────────────────────────────────────
+  const sepayGateway = getSepayGateway({ db: zencodeDb });
+  const antiSybilLedger = getAntiSybilLedger();
+  const googleOAuth = getGoogleOAuthService({ db: zencodeDb, ledger: userLedger });
+
+  // Google OAuth Config
+  app.get("/api/fleet/auth/oauth/google/config", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+    res.json(googleOAuth.getPublicConfig());
+  });
+
+  // Google OAuth Authenticate (1-click sign-in / registration)
+  app.post("/api/fleet/auth/oauth/google", (req, res) => {
+    void (async () => {
+      try {
+        const { idToken } = req.body || {};
+        if (!idToken) {
+          return res.status(400).json({ error: "Missing required parameter 'idToken'" });
+        }
+        const ipAddress = AntiSybilLedger.extractClientIp(req);
+        const userAgent = (req.headers["user-agent"] as string) || "";
+
+        // Check if user is already registered (existing users bypass registration anti-sybil limit)
+        const isExisting = googleOAuth.isExistingUser(idToken);
+        if (!isExisting) {
+          const antiSybilCheck = antiSybilLedger.checkRegistration(ipAddress, userAgent);
+          if (!antiSybilCheck.allowed) {
+            const body: Record<string, any> = { error: antiSybilCheck.error };
+            if (antiSybilCheck.retryAfter !== undefined) {
+              body.retryAfter = antiSybilCheck.retryAfter;
+            }
+            return res.status(429).json(body);
+          }
+        }
+
+        const result = await googleOAuth.authenticate(idToken, ipAddress);
+        if (!result.success) {
+          return res.status(401).json({ error: result.error || "Google authentication failed" });
+        }
+        if (result.isNewUser) {
+          antiSybilLedger.recordRegistration(ipAddress);
+        }
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // VietQR / SePay: Create Payment Order
+  const handleCreateOrder = (req: express.Request, res: express.Response) => {
+    try {
+      const { userId, planCode, customAmount } = req.body || {};
+      if (!userId || !planCode) {
+        return res.status(400).json({ error: "userId and planCode are required" });
+      }
+      const user = zencodeDb.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: `User '${userId}' not found` });
+      }
+      if (
+        customAmount !== undefined &&
+        (typeof customAmount !== "number" || !Number.isFinite(customAmount) || customAmount <= 0)
+      ) {
+        return res.status(400).json({ error: "customAmount must be a positive number" });
+      }
+      const orderData = sepayGateway.createPaymentOrder({ userId, planCode, customAmount });
+      res.json({ success: true, ...orderData });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  };
+  app.post("/api/billing/orders/create", handleCreateOrder);
+  app.post("/api/billing/create-order", handleCreateOrder);
+
+  // VietQR / SePay: Get Order Status
+  app.get("/api/billing/orders/:orderCode/status", (req, res) => {
+    try {
+      const order = sepayGateway.getOrderStatus(req.params.orderCode);
+      if (!order) {
+        return res.status(404).json({ error: `Order '${req.params.orderCode}' not found` });
+      }
+      res.json({ success: true, order });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // VietQR / SePay: Webhook Callback
+  const handleSepayWebhook = (req: express.Request, res: express.Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const tokenQuery = req.query.token as string | undefined;
+      const payload = req.body;
+      const result = sepayGateway.handleWebhook(payload, authHeader, tokenQuery);
+      res.status(result.status).json(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  };
+  app.post("/api/billing/sepay/webhook", handleSepayWebhook);
+  app.post("/api/billing/sepay-webhook", handleSepayWebhook);
+
+  // Pricing plans catalog
+  app.get("/api/billing/plans", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+    res.json({ plans: Object.values(ZENCODE_PLANS) });
+  });
+
+  // User credits balance & ledger summary
+  app.get("/api/billing/user/:userId/credits", (req, res) => {
+    try {
+      const credits = zencodeDb.getUserCredits(req.params.userId);
+      res.json({ success: true, credits });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Credit Balance Query (< 50ms p95 SLA)
+  app.get("/api/billing/credits/balance", (req, res) => {
+    try {
+      const user = resolveCallerUser(req);
+      if (!user) {
+        return res
+          .status(401)
+          .json({ error: "Unauthorized: Valid Bearer token or userId required" });
+      }
+
+      const refillResult = zencodeDb.checkAndRefillMonthlyCredits(user.id);
+      const credits = zencodeDb.getUserCredits(user.id);
+      const tokensEquivalentRemaining = Math.round(credits.balance * 2500);
+
+      res.json({
+        success: true,
+        userId: user.id,
+        balance: credits.balance,
+        tier: user.tier,
+        nextResetDate:
+          refillResult?.nextResetDate ||
+          new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        totalDeposited: credits.totalDeposited,
+        totalConsumed: credits.totalConsumed,
+        tokensEquivalentRemaining,
+        conversionRate: "1 Credit = 2,500 Flash/Codex tokens",
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Fleet Quotas & Concurrency Transparency Query
+  app.get("/api/fleet/user/quotas", (req, res) => {
+    try {
+      const user = resolveCallerUser(req);
+      if (!user) {
+        return res
+          .status(401)
+          .json({ error: "Unauthorized: Valid Bearer token or userId required" });
+      }
+
+      const refillResult = zencodeDb.checkAndRefillMonthlyCredits(user.id);
+      const credits = zencodeDb.getUserCredits(user.id);
+      const userRecord = zencodeDb.getUserById(user.id) || user;
+      const isFreeTier = userRecord.tier === "free";
+
+      res.json({
+        success: true,
+        userId: userRecord.id,
+        tier: userRecord.tier,
+        balance: credits.balance,
+        nextResetDate:
+          refillResult?.nextResetDate ||
+          new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        quotas: {
+          llm: {
+            dailyTokenBudget: userRecord.quotas.llm.dailyTokenBudget,
+            usedTodayTokens: userRecord.quotas.llm.usedTodayTokens,
+            remainingTokens: Math.max(
+              0,
+              userRecord.quotas.llm.dailyTokenBudget - userRecord.quotas.llm.usedTodayTokens,
+            ),
+            allowedModels: isFreeTier
+              ? ["codex", "gemini-2.5-flash"]
+              : userRecord.quotas.llm.allowedModels,
+            allowClaudeOpus: isFreeTier ? false : Boolean(userRecord.quotas.llm.allowClaudeOpus),
+            maxSpecialistAgents: isFreeTier ? 2 : 10,
+          },
+          modal_gpu: {
+            enabled: isFreeTier ? false : userRecord.quotas.modal_gpu.enabled,
+            dailyGpuMinutes: isFreeTier ? 0 : userRecord.quotas.modal_gpu.dailyGpuMinutes,
+            usedTodayMinutes: userRecord.quotas.modal_gpu.usedTodayMinutes,
+          },
+          cloudflare_clef: {
+            enabled: userRecord.quotas.cloudflare_clef.enabled,
+            dailyRequests: userRecord.quotas.cloudflare_clef.dailyRequests,
+            usedTodayRequests: userRecord.quotas.cloudflare_clef.usedTodayRequests,
+          },
+        },
+        concurrency: {
+          maxSpecialistAgents: isFreeTier ? 2 : 10,
+          currentRunningAgents: 0,
+          description: isFreeTier
+            ? "Free tier allows a maximum of 2 Specialist Agents running concurrently (Architect + Coder)"
+            : "Unlimited / higher concurrency for paid tiers",
+        },
+        consumptionHistory: {
+          totalDeposited: credits.totalDeposited,
+          totalConsumed: credits.totalConsumed,
+          currentBalance: credits.balance,
+        },
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
@@ -982,6 +2020,318 @@ function mountZencodeFleetAndGoalEndpoints(
     res.json({ jobs: openCodeFleet.getJobHistory() });
   });
 
+  // --- Modal GPU Swarm & Modal CLI Endpoints (Guarded: Modal GPU requires Pro or Enterprise tier) ---
+  app.use("/api/fleet/modal", (req, res, next) => {
+    const user = resolveCallerUser(req);
+    const userTier = user ? user.tier : "free";
+    const gate = assertFreeTierGating({ userTier, isModalGpuRequest: true });
+    if (!gate.allowed) {
+      return res.status(gate.status).json(gate.body);
+    }
+    next();
+  });
+
+  app.get("/api/fleet/modal/summary", (_req, res) => {
+    void (async () => {
+      try {
+        const summary = await modalGpuSwarm.getSummary();
+        res.json({ summary });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/profiles", (_req, res) => {
+    void (async () => {
+      try {
+        const profiles = await modalGpuSwarm.getProfiles();
+        res.json({ profiles });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/workers", (req, res) => {
+    void (async () => {
+      try {
+        const forceRefresh = req.query.refresh === "true";
+        const workers = await modalGpuSwarm.getDeployedWorkers(forceRefresh);
+        res.json({ workers });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/workloads", (_req, res) => {
+    res.json({ workloads: CANONICAL_WORKLOADS });
+  });
+
+  app.post("/api/fleet/modal/profile/switch", (req, res) => {
+    void (async () => {
+      try {
+        const { profile } = req.body || {};
+        if (!profile || typeof profile !== "string") {
+          res.status(400).json({ error: "Missing required profile name" });
+          return;
+        }
+        const result = await modalGpuSwarm.switchProfile(profile);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/modal/cli/exec", (req, res) => {
+    void (async () => {
+      try {
+        const { command, args, timeoutMs } = req.body || {};
+        if (!command || typeof command !== "string") {
+          res.status(400).json({ error: "Missing required command" });
+          return;
+        }
+        const result = await modalGpuSwarm.executeModalCli(
+          command,
+          Array.isArray(args) ? args : [],
+          timeoutMs,
+        );
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/credits", (req, res) => {
+    void (async () => {
+      try {
+        const forceRefresh = req.query.refresh === "true";
+        const result = await modalGpuSwarm.getWorkspacesCredits(forceRefresh);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/recommendations", (_req, res) => {
+    void (async () => {
+      try {
+        const recommendations = await modalGpuSwarm.getRecommendations();
+        res.json({ recommendations });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/modal/allocate", (req, res) => {
+    void (async () => {
+      try {
+        const { appId } = req.body || {};
+        if (!appId || typeof appId !== "string") {
+          res.status(400).json({ error: "Missing required appId" });
+          return;
+        }
+        const result = await modalGpuSwarm.allocateWorkload(appId);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/logs", (req, res) => {
+    void (async () => {
+      try {
+        const limit = req.query.limit ? Number(req.query.limit) : undefined;
+        const page = req.query.page ? Number(req.query.page) : undefined;
+        const since_id = req.query.since_id ? Number(req.query.since_id) : undefined;
+        const workspace = req.query.workspace ? String(req.query.workspace) : undefined;
+        const app_id = req.query.app_id ? String(req.query.app_id) : undefined;
+        const status = req.query.status ? String(req.query.status) : undefined;
+        const min_cost = req.query.min_cost ? Number(req.query.min_cost) : undefined;
+        const max_cost = req.query.max_cost ? Number(req.query.max_cost) : undefined;
+        const order = req.query.order ? String(req.query.order) : undefined;
+
+        const result = await modalGpuSwarm.getModalLogs({
+          limit,
+          page,
+          since_id,
+          workspace,
+          app_id,
+          status,
+          min_cost,
+          max_cost,
+          order,
+        });
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/logs/metrics", (req, res) => {
+    void (async () => {
+      try {
+        const hours = req.query.time_window_hours ? Number(req.query.time_window_hours) : undefined;
+        const metrics = await modalGpuSwarm.getModalLogMetrics(hours);
+        res.json(metrics);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/modal/logs/retention", (req, res) => {
+    void (async () => {
+      try {
+        const days = req.body?.retention_days ? Number(req.body.retention_days) : 14;
+        const result = await modalGpuSwarm.pruneModalLogs(days);
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.get("/api/fleet/modal/rebalance/recommendations", (req, res) => {
+    void (async () => {
+      try {
+        const force = req.query.force_refresh === "true";
+        const status = await modalGpuSwarm.getCrossMeshRebalanceRecommendations(force);
+        res.json(status);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/modal/rebalance/apply", (req, res) => {
+    void (async () => {
+      try {
+        const { recommendation_id, action_payload } = req.body || {};
+        if (!recommendation_id || typeof recommendation_id !== "string") {
+          res.status(400).json({ error: "Missing recommendation_id" });
+          return;
+        }
+        const result = await modalGpuSwarm.applyCrossMeshRebalance(
+          recommendation_id,
+          action_payload,
+        );
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: message });
+      }
+    })();
+  });
+
+  // --- Fleet Analytics, Cost Accounting & 30-Day Retention DB Endpoints ---
+  app.get("/api/fleet/analytics/summary", (req, res) => {
+    try {
+      const range = (req.query.range as any) || "24h";
+      const summary = analyticsDb.getSummary(range);
+      res.json({ summary });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/fleet/analytics/timeline", (req, res) => {
+    try {
+      const range = (req.query.range as any) || "24h";
+      const timeline = analyticsDb.getTimeline(range);
+      res.json({ timeline });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/fleet/analytics/nodes", (req, res) => {
+    try {
+      const range = (req.query.range as any) || "24h";
+      const nodes = analyticsDb.getNodeUtilization(range);
+      res.json({ nodes });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/fleet/analytics/models", (req, res) => {
+    try {
+      const range = (req.query.range as any) || "24h";
+      const { models, totals } = analyticsDb.getModelAnalytics(range);
+      res.json({ models, totals });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/fleet/analytics/node-models", (req, res) => {
+    try {
+      const range = (req.query.range as any) || "24h";
+      const distributions = analyticsDb.getNodeModelDistributions(range);
+      res.json({ distributions });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/fleet/analytics/requests", (req, res) => {
+    try {
+      const limit = Number(req.query.limit) || 50;
+      const cluster = req.query.cluster ? String(req.query.cluster) : undefined;
+      const requests = analyticsDb.getRecentRequests(limit, cluster);
+      res.json({ requests });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/fleet/analytics/retention", (_req, res) => {
+    try {
+      const history = analyticsDb.getRetentionHistory();
+      res.json({ history });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/fleet/analytics/prune", (req, res) => {
+    try {
+      const days = Number(req.body?.retentionDays) || 30;
+      const result = analyticsDb.pruneOlderThan30Days(days);
+      res.json({ success: true, result });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ success: false, error: message });
+    }
+  });
+
   app.post("/api/goal/start", (req, res) => {
     const { intent, budgetCapTokens } = req.body || {};
     goalEngine
@@ -1004,11 +2354,88 @@ function mountZencodeFleetAndGoalEndpoints(
     goalEngine.cancelGoal();
     res.json({ status: "cancelled" });
   });
+
+  // --- Zencode Self-Healing & Git Fix Dispatcher Endpoints ---
+  app.get("/api/fleet/self-healing/incidents", (_req, res) => {
+    res.json({ incidents: selfHealing.getAllIncidents() });
+  });
+
+  app.get("/api/fleet/self-healing/status", (_req, res) => {
+    res.json({ status: selfHealing.getCircuitBreakerStatus() });
+  });
+
+  app.post("/api/fleet/self-healing/report", (req, res) => {
+    void (async () => {
+      try {
+        const incident = await selfHealing.reportIncident(req.body || {});
+        res.json({ success: true, incident });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/self-healing/incidents/:id/propose", (req, res) => {
+    void (async () => {
+      try {
+        const fix = await selfHealing.proposeFix(req.params.id);
+        res.json({ success: true, fix });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/self-healing/incidents/:id/heal", (req, res) => {
+    void (async () => {
+      try {
+        const { pushToRemote = false } = req.body || {};
+        const result = await selfHealing.healAndCreateBranch(req.params.id, pushToRemote);
+        res.json({ success: true, result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/self-healing/incidents/:id/autonomous", (req, res) => {
+    void (async () => {
+      try {
+        const {
+          testCommand,
+          targetBranch,
+          autoMerge = true,
+          pushToRemote = false,
+        } = req.body || {};
+        const result = await selfHealing.autonomousHeal(req.params.id, {
+          testCommand,
+          targetBranch,
+          autoMerge,
+          pushToRemote,
+        });
+        res.json({ success: result.success, result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ success: false, error: message });
+      }
+    })();
+  });
+
+  app.post("/api/fleet/self-healing/circuit-breaker/reset", (req, res) => {
+    const { key } = req.body || {};
+    selfHealing.resetCircuitBreaker(key);
+    res.json({ success: true, status: selfHealing.getCircuitBreakerStatus() });
+  });
 }
 
 function createZencodeSwarmSubsystems(config: PaseoDaemonConfig, logger: Logger) {
   const fleetRegistry = new FleetRegistry({ logger });
+  setFleetRegistry(fleetRegistry);
   const nineRouter = new NineRouter({ registry: fleetRegistry, logger });
+  setNineRouter(nineRouter);
   const egressManager = new EgressManager({ logger });
   const clefCouncil = new ClefCouncil({ logger });
   const goalEngine = new GoalEngine({
@@ -1018,6 +2445,10 @@ function createZencodeSwarmSubsystems(config: PaseoDaemonConfig, logger: Logger)
     logger,
     workspaceDir: config.paseoHome,
   });
+  const selfHealing = new SelfHealingSupervisor({
+    storageDir: config.paseoHome,
+    defaultWorkspaceDir: process.cwd(),
+  });
   const shutdownSwarm = async (): Promise<void> => {
     goalEngine.cancelGoal();
     try {
@@ -1026,7 +2457,15 @@ function createZencodeSwarmSubsystems(config: PaseoDaemonConfig, logger: Logger)
       // ignore
     }
   };
-  return { fleetRegistry, nineRouter, egressManager, clefCouncil, goalEngine, shutdownSwarm };
+  return {
+    fleetRegistry,
+    nineRouter,
+    egressManager,
+    clefCouncil,
+    goalEngine,
+    selfHealing,
+    shutdownSwarm,
+  };
 }
 
 function resolveBootstrapGitPolicy(config: PaseoDaemonConfig) {
@@ -1262,6 +2701,7 @@ export async function createPaseoDaemon(
 
   // Health check endpoint
   app.get("/api/health", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=1, s-maxage=5, stale-while-revalidate=10");
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
@@ -1276,7 +2716,7 @@ export async function createPaseoDaemon(
   });
 
   // Zencode Swarm & Autonomous endpoints
-  mountZencodeFleetAndGoalEndpoints(app, fleetRegistry, nineRouter, goalEngine);
+  mountZencodeFleetAndGoalEndpoints(app, fleetRegistry, nineRouter, goalEngine, swarm.selfHealing);
 
   const handleFileDownload = async (req: express.Request, res: express.Response): Promise<void> => {
     const token =

@@ -1,0 +1,45 @@
+FROM node:24-bookworm-slim
+
+ENV HOME=/home/paseo \
+    PASEO_HOME=/home/paseo/.paseo \
+    PASEO_LISTEN=0.0.0.0:6768 \
+    PASEO_WEB_UI_ENABLED=true \
+    PASEO_LOG_FORMAT=json \
+    PASEO_LOG_LEVEL=info \
+    NODE_ENV=production \
+    ZENCODE_DATABASE_PATH=/data/zencode_master.db
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      bash \
+      curl \
+      git \
+      ca-certificates \
+      tini \
+      procps \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy root workspace package manifests
+COPY package.json package-lock.json ./
+
+# Copy built packages
+COPY packages/protocol ./packages/protocol
+COPY packages/highlight ./packages/highlight
+COPY packages/relay ./packages/relay
+COPY packages/client ./packages/client
+COPY packages/plugin ./packages/plugin
+COPY packages/server ./packages/server
+COPY packages/app/dist ./packages/app/dist
+COPY packages/website/dist ./packages/website/dist
+
+# Install production dependencies
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+# Create runtime directories
+RUN mkdir -p /data /home/paseo/.paseo /home/paseo/outputs && chmod -R 777 /data /home/paseo
+
+EXPOSE 6768 4173
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "packages/server/dist/scripts/supervisor-entrypoint.js"]

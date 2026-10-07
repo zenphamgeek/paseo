@@ -22,6 +22,13 @@ export interface FleetNodeRuntime {
   claudeQuotaPercent?: number;
   geminiResetTime?: string | null;
   claudeResetTime?: string | null;
+  geminiResetCountdownS?: number;
+  claudeResetCountdownS?: number;
+  label?: string | null;
+  domainSpecialization?: string[];
+  trustScore?: number;
+  ineligible?: boolean;
+  ineligibleReason?: string | null;
 }
 
 export interface FleetRegistryEvents {

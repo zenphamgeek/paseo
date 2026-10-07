@@ -24,12 +24,14 @@ export type QuotaSnapshot = z.infer<typeof QuotaSnapshotSchema>;
 
 export const FleetNodeConfigSchema = z.object({
   id: z.string(),
+  displayName: z.string().optional(),
   kind: z.enum(["agy", "codex", "opencode", "acp", "nebula"]),
   tier: z.enum(["ultra", "pro", "standard"]).default("pro"),
   accountEmail: z.string().optional(),
   homeDirectory: z.string(),
   caps: z.array(z.string()).default([]),
   preferredModel: z.string().optional(),
+  allowedModels: z.array(z.string()).optional(),
   maxConcurrency: z.number().default(1),
   proxyId: z.string().optional(),
 });
@@ -37,12 +39,14 @@ export type FleetNodeConfig = z.infer<typeof FleetNodeConfigSchema>;
 
 export interface FleetNodeSummary {
   id: string;
+  displayName?: string;
   kind: NodeKind;
   tier: ModelTier;
   state: NodeState;
   accountEmail?: string;
   caps?: string[];
   preferredModel?: string;
+  allowedModels?: string[];
   proxyId?: string;
   geminiQuotaPercent?: number;
   claudeQuotaPercent?: number;
@@ -53,6 +57,16 @@ export interface FleetNodeSummary {
   requestsServed: number;
   errorCount: number;
   lastHeartbeat: number;
+  retentionPeriod?: string;
+  tokensConsumed?: number;
+  usdSaved?: number;
+  label?: string | null;
+  domainSpecialization?: string[];
+  trustScore?: number;
+  ineligible?: boolean;
+  ineligibleReason?: string | null;
+  geminiResetCountdownS?: number;
+  claudeResetCountdownS?: number;
 }
 
 export interface FleetClusterSummary {
@@ -61,6 +75,8 @@ export interface FleetClusterSummary {
   busyNodes: number;
   ultraNodes: number;
   proNodes: number;
+  agyNodes?: number;
+  opencodeNodes?: number;
   totalTokensCapacity: number;
   totalTokensUsed: number;
   overallQuotaPercent: number;
@@ -98,6 +114,28 @@ export interface RouteDecision {
   model: string;
   fallbackChain: Array<{ nodeId: string; model: string }>;
 }
+
+export const ClefGateMetadataSchema = z.object({
+  model: z.string(),
+  latencyMs: z.number().optional(),
+  complexityScore: z.number().optional(),
+  decision: z.string().optional(),
+  tokensSaved: z.number().optional(),
+});
+export type ClefGateMetadata = z.infer<typeof ClefGateMetadataSchema>;
+
+export const FleetExecutionMetadataSchema = z.object({
+  isFleetMode: z.boolean().default(true),
+  orchestratorNode: z.string(),
+  orchestratorModel: z.string(),
+  workerNode: z.string(),
+  workerModel: z.string(),
+  tier: z.enum(["ultra", "pro", "standard"]).optional(),
+  taskId: z.string().optional(),
+  dispatchedAt: z.string().optional(),
+  clefGate: ClefGateMetadataSchema.optional(),
+});
+export type FleetExecutionMetadata = z.infer<typeof FleetExecutionMetadataSchema>;
 
 export const TaskGateEnum = z.enum(["lint", "types", "unit_tests", "security_audit"]);
 export type TaskGate = z.infer<typeof TaskGateEnum>;

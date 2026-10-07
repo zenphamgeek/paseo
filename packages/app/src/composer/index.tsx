@@ -49,6 +49,7 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
+import { TelegramNotificationToggle } from "@/components/telegram-notification-toggle";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
 import { useFilePicker } from "@/hooks/use-file-picker";
@@ -2102,8 +2103,13 @@ function ComposerContentImpl({
     ],
   );
   const beforeVoiceContent = useMemo(
-    () => <>{resolveContextWindowPlacement(contextWindowMeter, hasAgent)}</>,
-    [contextWindowMeter, hasAgent],
+    () => (
+      <>
+        {agentId ? <TelegramNotificationToggle conversationId={agentId} /> : null}
+        {resolveContextWindowPlacement(contextWindowMeter, hasAgent)}
+      </>
+    ),
+    [agentId, contextWindowMeter, hasAgent],
   );
 
   const hasGithubAttachment = useMemo(

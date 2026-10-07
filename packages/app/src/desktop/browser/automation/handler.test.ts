@@ -339,6 +339,95 @@ describe("mountBrowserAutomationHandler", () => {
     ]);
   });
 
+  test("browser_new_tab with sidePanel creates the browser tab in the side pane", async () => {
+    const browser = new BrowserAutomationHandlerHarness();
+    const workspaceKey = buildWorkspaceTabPersistenceKey({
+      serverId: "server-1",
+      workspaceId: "wks_workspace_a",
+    });
+    if (!workspaceKey) {
+      throw new Error("Expected workspace key");
+    }
+    useWorkspaceLayoutStore.getState().openTab({
+      workspaceKey,
+      target: { kind: "draft", draftId: "human-draft" },
+      intent: "reveal",
+    });
+    browser.mount({ serverId: "server-1" });
+
+    browser.receive({
+      type: "browser.automation.execute.request",
+      requestId: "req-new-side",
+      agentId: "agent-1",
+      workspaceId: "wks_workspace_a",
+      command: {
+        command: "new_tab",
+        args: { url: "https://example.com", sidePanel: true },
+      },
+    });
+    await flushAsyncWork();
+
+    const response = browser.client.sentResponses[0];
+    expect(response?.payload).toMatchObject({
+      requestId: "req-new-side",
+      ok: true,
+      result: {
+        command: "new_tab",
+        workspaceId: "wks_workspace_a",
+        url: "https://example.com",
+        sidePanel: true,
+      },
+    });
+
+    const sidePaneId = useWorkspaceLayoutStore.getState().sidePaneIdByWorkspace[workspaceKey];
+    expect(sidePaneId).toBeTruthy();
+    const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    if (!layout || !sidePaneId) {
+      throw new Error("Expected side pane layout");
+    }
+    const sidePane = findPaneById(layout.root, sidePaneId);
+    expect(sidePane?.tabIds.length).toBeGreaterThan(0);
+  });
+
+  test("browser_reveal_tab moves an existing tab to the side pane", async () => {
+    const browser = new BrowserAutomationHandlerHarness();
+    const workspaceKey = buildWorkspaceTabPersistenceKey({
+      serverId: "server-1",
+      workspaceId: "wks_workspace_a",
+    });
+    if (!workspaceKey) {
+      throw new Error("Expected workspace key");
+    }
+    browser.mount({ serverId: "server-1" });
+
+    browser.receive(browserNewTabRequest());
+    await flushAsyncWork();
+
+    const newTabRes = newTabResultFrom(browser.client.payloadAt(0));
+    const browserId = newTabRes.browserId;
+
+    browser.receive({
+      type: "browser.automation.execute.request",
+      requestId: "req-reveal",
+      agentId: "agent-1",
+      workspaceId: "wks_workspace_a",
+      command: {
+        command: "reveal_tab",
+        args: { browserId, sidePanel: true },
+      },
+    });
+    await flushAsyncWork();
+
+    expect(browser.client.payloadAt(1)).toEqual({
+      requestId: "req-reveal",
+      ok: true,
+      result: { command: "reveal_tab", browserId, sidePanel: true },
+    });
+
+    const sidePaneId = useWorkspaceLayoutStore.getState().sidePaneIdByWorkspace[workspaceKey];
+    expect(sidePaneId).toBeTruthy();
+  });
+
   test("browser_new_tab returns a retryable timeout when the resident webview does not register", async () => {
     const browser = new BrowserAutomationHandlerHarness();
     browser.browser.response = emptyListTabsPayload();

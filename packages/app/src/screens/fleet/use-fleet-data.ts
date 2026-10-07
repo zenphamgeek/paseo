@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  AnalyticsTimeRange,
   DispatchTaskPayload,
   FleetAuthMatrix,
   FleetClusterSummary,
@@ -45,7 +46,8 @@ async function extractJsonIfOk<T>(result: PromiseSettledResult<Response>): Promi
   return null;
 }
 
-export function useFleetData() {
+export function useFleetData(initialRetention: AnalyticsTimeRange = "24h") {
+  const [retentionPeriod, setRetentionPeriodState] = useState<AnalyticsTimeRange>(initialRetention);
   const [nodes, setNodes] = useState<FleetNodeSummary[]>([]);
   const [summary, setSummary] = useState<FleetClusterSummary>(DEFAULT_SUMMARY);
   const [jobs, setJobs] = useState<FleetJobRecord[]>([]);
@@ -58,52 +60,55 @@ export function useFleetData() {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  const fetchAllFleetData = useCallback(async (silent = false) => {
-    if (!silent) setIsLoading(true);
-    const baseUrl = getDaemonApiBaseUrl();
+  const fetchAllFleetData = useCallback(
+    async (silent = false, range: AnalyticsTimeRange = retentionPeriod) => {
+      if (!silent) setIsLoading(true);
+      const baseUrl = getDaemonApiBaseUrl();
 
-    try {
-      const settled = await Promise.allSettled([
-        fetch(`${baseUrl}/api/fleet/nodes`),
-        fetch(`${baseUrl}/api/fleet/summary`),
-        fetch(`${baseUrl}/api/fleet/jobs`),
-        fetch(`${baseUrl}/api/fleet/council`),
-        fetch(`${baseUrl}/api/fleet/telemetry`),
-        fetch(`${baseUrl}/api/fleet/auth/status`),
-      ]);
-
-      if (!mountedRef.current) return;
-
-      const [nodesData, summaryData, jobsData, councilData, telemetryData, authData] =
-        await Promise.all([
-          extractJsonIfOk<{ nodes?: FleetNodeSummary[] }>(settled[0]),
-          extractJsonIfOk<{ summary?: FleetClusterSummary }>(settled[1]),
-          extractJsonIfOk<{ jobs?: FleetJobRecord[] }>(settled[2]),
-          extractJsonIfOk<FleetCouncilData>(settled[3]),
-          extractJsonIfOk<SwarmTelemetrySnapshot>(settled[4]),
-          extractJsonIfOk<FleetAuthMatrix>(settled[5]),
+      try {
+        const settled = await Promise.allSettled([
+          fetch(`${baseUrl}/api/fleet/nodes?range=${range}`),
+          fetch(`${baseUrl}/api/fleet/summary`),
+          fetch(`${baseUrl}/api/fleet/jobs`),
+          fetch(`${baseUrl}/api/fleet/council`),
+          fetch(`${baseUrl}/api/fleet/telemetry`),
+          fetch(`${baseUrl}/api/fleet/auth/status`),
         ]);
 
-      if (nodesData?.nodes) setNodes(nodesData.nodes);
-      if (summaryData?.summary) setSummary(summaryData.summary);
-      if (jobsData?.jobs) setJobs(jobsData.jobs);
-      if (councilData) setCouncil(councilData);
-      if (telemetryData) setTelemetry(telemetryData);
-      if (authData) setAuthStatus(authData);
+        if (!mountedRef.current) return;
 
-      setLastUpdated(Date.now());
-      setError(null);
-    } catch (err: unknown) {
-      if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-    } finally {
-      if (mountedRef.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        const [nodesData, summaryData, jobsData, councilData, telemetryData, authData] =
+          await Promise.all([
+            extractJsonIfOk<{ nodes?: FleetNodeSummary[] }>(settled[0]),
+            extractJsonIfOk<{ summary?: FleetClusterSummary }>(settled[1]),
+            extractJsonIfOk<{ jobs?: FleetJobRecord[] }>(settled[2]),
+            extractJsonIfOk<FleetCouncilData>(settled[3]),
+            extractJsonIfOk<SwarmTelemetrySnapshot>(settled[4]),
+            extractJsonIfOk<FleetAuthMatrix>(settled[5]),
+          ]);
+
+        if (nodesData?.nodes) setNodes(nodesData.nodes);
+        if (summaryData?.summary) setSummary(summaryData.summary);
+        if (jobsData?.jobs) setJobs(jobsData.jobs);
+        if (councilData) setCouncil(councilData);
+        if (telemetryData) setTelemetry(telemetryData);
+        if (authData) setAuthStatus(authData);
+
+        setLastUpdated(Date.now());
+        setError(null);
+      } catch (err: unknown) {
+        if (!mountedRef.current) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+      } finally {
+        if (mountedRef.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   const refreshQuotas = useCallback(async () => {
     setIsRefreshing(true);
@@ -200,22 +205,43 @@ export function useFleetData() {
     }));
   }, []);
 
+  const setRetentionPeriod = useCallback(
+    (range: AnalyticsTimeRange) => {
+      setRetentionPeriodState(range);
+      void fetchAllFleetData(true, range);
+    },
+    [fetchAllFleetData],
+  );
+
   useEffect(() => {
     mountedRef.current = true;
-    fetchAllFleetData();
+    fetchAllFleetData(false, retentionPeriod);
 
-    // Auto-refresh every 8 seconds when not halted
-    const interval = setInterval(() => {
-      if (!isTelemetryHalted) {
-        fetchAllFleetData(true);
-      }
-    }, 8000);
+    // Auto-refresh with sovereign stealth deperiodic jitter: uniform distribution in [2800ms, 5200ms] (GEMINI.md Sec 2)
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let isCancelled = false;
+
+    const scheduleNextPoll = () => {
+      if (isCancelled) return;
+      const jitterMs = Math.floor(2800 + Math.random() * (5200 - 2800 + 1));
+      timerId = setTimeout(() => {
+        if (!isCancelled && !isTelemetryHalted) {
+          fetchAllFleetData(true, retentionPeriod);
+        }
+        scheduleNextPoll();
+      }, jitterMs);
+    };
+
+    scheduleNextPoll();
 
     return () => {
+      isCancelled = true;
       mountedRef.current = false;
-      clearInterval(interval);
+      if (timerId !== null) {
+        clearTimeout(timerId);
+      }
     };
-  }, [fetchAllFleetData, isTelemetryHalted]);
+  }, [fetchAllFleetData, isTelemetryHalted, retentionPeriod]);
 
   return {
     nodes,
@@ -229,6 +255,8 @@ export function useFleetData() {
     isTelemetryHalted,
     lastUpdated,
     error,
+    retentionPeriod,
+    setRetentionPeriod,
     refreshQuotas,
     runAutoConfig,
     saveManualAuth,

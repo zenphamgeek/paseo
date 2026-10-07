@@ -1,4 +1,5 @@
 import { memo, useCallback, type ReactElement } from "react";
+import { Pressable, Text } from "react-native";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { AgentTaskList } from "@/composer/task-list";
@@ -8,6 +9,11 @@ import { usePaneContext } from "@/panels/pane-context";
 import { useSettings } from "@/hooks/use-settings";
 import { PluginComposerPills } from "@/plugins";
 import { useSessionStore } from "@/stores/session-store";
+import { composerPillStyles } from "@/composer/pill-styles";
+import { TelegramIcon } from "@/components/icons/telegram-icon";
+import { useConversationTelegramStore } from "@/stores/conversation-telegram-store";
+import { useToast } from "@/contexts/toast-context";
+import { playVibeSound } from "@/utils/vibe-audio";
 import {
   type ArchiveFinishedStatus,
   useArchiveSubagent,
@@ -112,8 +118,13 @@ export const AgentTracks = memo(function AgentTracks({
     });
   }, [cwd, isCompact, openInSidePane, serverId, workspaceKey]);
 
+  const isTelegramAlertActive = useConversationTelegramStore((state) =>
+    agentId ? state.isTelegramEnabled(agentId) : false,
+  );
+
   if (
     !hasWorkspaceDiffStat &&
+    !isTelegramAlertActive &&
     !hasAgentTracks({
       subagentRows,
       tasks,
@@ -137,6 +148,7 @@ export const AgentTracks = memo(function AgentTracks({
         archiveFinishedStatus={archiveFinishedStatus}
         onDetachSubagent={canDetachSubagents ? detachSubagent : undefined}
       />
+      <ConversationTelegramPill agentId={agentId} />
       <PluginComposerPills
         serverId={serverId}
         workspaceId={workspaceId}
@@ -151,6 +163,52 @@ export const AgentTracks = memo(function AgentTracks({
     </ComposerTrackBar>
   );
 });
+
+function ConversationTelegramPill({ agentId }: { agentId: string }) {
+  const isEnabled = useConversationTelegramStore((state) => state.isTelegramEnabled(agentId));
+  const toggleTelegram = useConversationTelegramStore((state) => state.toggleTelegram);
+  const toast = useToast();
+
+  const handlePress = useCallback(() => {
+    const next = toggleTelegram(agentId);
+    playVibeSound("vibe_start");
+    if (next) {
+      toast.show("Telegram alerts enabled for this conversation (notifying @zenpham_bot)", {
+        variant: "info",
+      });
+    } else {
+      toast.show("Telegram alerts disabled for this conversation", { variant: "info" });
+    }
+  }, [agentId, toggleTelegram, toast]);
+
+  if (!isEnabled) {
+    return null;
+  }
+
+  return (
+    <Pressable
+      testID="conversation-telegram-pill"
+      accessibilityRole="button"
+      accessibilityLabel="Telegram Alerts: Active. Click to turn off."
+      onPress={handlePress}
+      style={[
+        composerPillStyles.body,
+        {
+          borderColor: "rgba(32, 233, 195, 0.45)",
+          backgroundColor: "rgba(32, 233, 195, 0.08)",
+          gap: 6,
+        },
+      ]}
+    >
+      <TelegramIcon size={13} color="#20E9C3" />
+      <Text
+        style={[composerPillStyles.label, { color: "#20E9C3", fontWeight: "600", fontSize: 12 }]}
+      >
+        Telegram Alert: ON
+      </Text>
+    </Pressable>
+  );
+}
 
 export function hasAgentTracks({
   subagentRows,

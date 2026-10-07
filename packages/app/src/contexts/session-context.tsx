@@ -51,6 +51,8 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { useProviderSubagentStore } from "@/subagents/provider-store";
+import { playVibeSound } from "@/utils/vibe-audio";
+import { dispatchConversationTelegramNotification } from "@/stores/conversation-telegram-store";
 
 // Re-export types from session-store and draft-store for backward compatibility
 export type { DraftInput } from "@/stores/draft-store";
@@ -277,6 +279,23 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       if (params.reason === "error") {
         return;
       }
+
+      if (params.reason === "permission") {
+        playVibeSound("attention_needed");
+        const head = session?.agentStreamHead.get(params.agentId) ?? [];
+        const tail = session?.agentStreamTail.get(params.agentId) ?? [];
+        const assistantMsg =
+          findLatestAssistantMessageText(head) ?? findLatestAssistantMessageText(tail);
+        void dispatchConversationTelegramNotification({
+          conversationId: params.agentId,
+          title: session?.agents?.get(params.agentId)?.title ?? undefined,
+          event: "attention_needed",
+          summary: assistantMsg ?? "Human attention required",
+        });
+      } else if (params.reason === "finished") {
+        playVibeSound("task_complete");
+      }
+
       const isActivelyVisible = getIsAppActivelyVisible(appState);
       const isAwayFromAgent = !isActivelyVisible || attentionFocusedAgentId !== params.agentId;
       if (!isAwayFromAgent) {
@@ -386,6 +405,33 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         event.type === "turn_canceled"
       ) {
         voiceRuntime?.onTurnEvent(serverId, agentId, event.type);
+        if (event.type === "turn_started") {
+          playVibeSound("vibe_start");
+        } else if (event.type === "turn_completed") {
+          playVibeSound("task_complete");
+          const session = useSessionStore.getState().sessions[serverId];
+          const agent = session?.agents?.get(agentId) ?? session?.agentDetails?.get(agentId);
+          const head = session?.agentStreamHead.get(agentId) ?? [];
+          const tail = session?.agentStreamTail.get(agentId) ?? [];
+          const assistantMsg =
+            findLatestAssistantMessageText(head) ?? findLatestAssistantMessageText(tail);
+          void dispatchConversationTelegramNotification({
+            conversationId: agentId,
+            title: agent?.title ?? undefined,
+            event: "completed",
+            summary: assistantMsg ?? "Turn completed successfully",
+          });
+        } else if (event.type === "turn_failed") {
+          playVibeSound("error_alert");
+          const session = useSessionStore.getState().sessions[serverId];
+          const agent = session?.agents?.get(agentId) ?? session?.agentDetails?.get(agentId);
+          void dispatchConversationTelegramNotification({
+            conversationId: agentId,
+            title: agent?.title ?? undefined,
+            event: "error",
+            summary: "Turn failed or encountered an error",
+          });
+        }
       }
       const turnLiveness = deriveAgentStreamTurnLiveness([
         { event: streamEvent, seq, epoch, timestamp: parsedTimestamp },
@@ -559,6 +605,16 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     const unsubPermissionRequest = onFeed("agent_permission_request", (message) => {
       if (message.type !== "agent_permission_request") return;
       const { agentId, request } = message.payload;
+
+      playVibeSound("attention_needed");
+      const session = useSessionStore.getState().sessions[serverId];
+      const agent = session?.agents?.get(agentId) ?? session?.agentDetails?.get(agentId);
+      void dispatchConversationTelegramNotification({
+        conversationId: agentId,
+        title: agent?.title ?? undefined,
+        event: "attention_needed",
+        summary: `Permission requested: ${(request as { title?: string; kind?: string }).title || (request as { kind?: string }).kind || "Action required"}`,
+      });
 
       setPendingPermissions(serverId, (prev) => {
         const next = new Map(prev);
