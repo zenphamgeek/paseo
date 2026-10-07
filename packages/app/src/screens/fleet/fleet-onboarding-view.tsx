@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import { StyleSheet } from "react-native-unistyles";
 import {
   AlertCircle,
@@ -233,7 +232,7 @@ export function FleetOnboardingView({ onPasskeyAuthenticated }: FleetOnboardingV
             </Text>
             <View style={styles.inputRow}>
               <View style={styles.inputWrapper}>
-                <AdaptiveTextInput
+                <TextInput
                   value={passkeyInput}
                   onChangeText={setPasskeyInput}
                   placeholder="zen_live_dev_..."
