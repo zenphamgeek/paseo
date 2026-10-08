@@ -4,13 +4,22 @@ import type { RequestHandler, Response } from "express";
 import type { Logger } from "pino";
 
 const EXCLUDED_PATH_PREFIXES = ["/api/", "/mcp/", "/public/"];
-const EXCLUDED_PATHS = new Set(["/api", "/mcp", "/public"]);
+const EXCLUDED_PATHS = new Set([
+  "/api",
+  "/mcp",
+  "/public",
+  "/internal-api.openapi.yaml",
+  "/openapi.json",
+]);
 
 function isExcludedPath(requestPath: string): boolean {
   for (const prefix of EXCLUDED_PATH_PREFIXES) {
     if (requestPath.startsWith(prefix)) {
       return true;
     }
+  }
+  if (requestPath.endsWith(".openapi.yaml") || requestPath.endsWith(".openapi.json")) {
+    return true;
   }
   return EXCLUDED_PATHS.has(requestPath);
 }

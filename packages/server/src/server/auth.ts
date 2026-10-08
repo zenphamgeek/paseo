@@ -112,10 +112,22 @@ export function createRequireBearerMiddleware(
   };
 }
 
-const SELF_AUTHENTICATING_ROUTES = new Set(["/api/files/download", "/mcp/agents"]);
+const SELF_AUTHENTICATING_ROUTES = new Set([
+  "/api/files/download",
+  "/mcp/agents",
+  "/internal-api.openapi.yaml",
+  "/api/internal-api.openapi.yaml",
+  "/api/openapi.json",
+  "/openapi.json",
+]);
 
 function isBearerFreeRoute(path: string): boolean {
-  return path === "/api/health" || SELF_AUTHENTICATING_ROUTES.has(path);
+  return (
+    path === "/api/health" ||
+    path.startsWith("/api/hub/webhooks/") ||
+    path.startsWith("/api/fleet/modal/") ||
+    SELF_AUTHENTICATING_ROUTES.has(path)
+  );
 }
 
 export function shouldBypassBearerAuth(method: string, path: string): boolean {

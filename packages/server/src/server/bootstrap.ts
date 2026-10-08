@@ -2,7 +2,8 @@ import type { PluginRegistries } from "@getpaseo/protocol/plugin-registry";
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
-import { constants, existsSync, unlinkSync } from "fs";
+import fs, { constants, existsSync, unlinkSync } from "node:fs";
+import yaml from "yaml";
 import { open, rm, stat } from "fs/promises";
 import { randomUUID } from "node:crypto";
 import { getHostName } from "./host-name.js";
@@ -915,6 +916,46 @@ function mountModalRouterProxyRoutes(app: express.Express): void {
       });
     }
   });
+
+  // Proxy any other /api/fleet/modal/* routes -> router:7777/api/fleet/modal/*
+  app.all("/api/fleet/modal/*", async (req, res) => {
+    try {
+      const targetUrl = `${routerBaseUrl}${req.originalUrl}`;
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        ...createTracingHeaders(req),
+      };
+      if (req.header("content-type")) {
+        headers["content-type"] = req.header("content-type")!;
+      }
+      if (req.header("authorization")) {
+        headers["authorization"] = req.header("authorization")!;
+      }
+
+      const forwardRes = await fetch(targetUrl, {
+        method: req.method,
+        headers,
+        body: ["POST", "PUT", "PATCH"].includes(req.method) ? JSON.stringify(req.body || {}) : undefined,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const contentType = forwardRes.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await forwardRes.json().catch(() => ({}));
+        res.status(forwardRes.status).json(data);
+      } else {
+        const text = await forwardRes.text();
+        res.status(forwardRes.status).type(contentType).send(text);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({
+        error: "Failed to connect to router mesh on port 7777",
+        target: `${routerBaseUrl}${req.originalUrl}`,
+        details: message,
+      });
+    }
+  });
 }
 
 function mountHubWebhookProxyRoutes(app: express.Express): void {
@@ -1038,6 +1079,112 @@ function mountHubWebhookProxyRoutes(app: express.Express): void {
       });
     }
   });
+
+  // Proxy any other /api/hub/webhooks/* routes -> hub:3000
+  app.all("/api/hub/webhooks/*", async (req, res) => {
+    try {
+      const targetUrl = `${hubBaseUrl}${req.originalUrl}`;
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        ...createTracingHeaders(req),
+      };
+      if (req.header("content-type")) {
+        headers["content-type"] = req.header("content-type")!;
+      }
+      for (const [key, val] of Object.entries(req.headers)) {
+        if (
+          key.includes("signature") ||
+          key.includes("delivery") ||
+          key.includes("event") ||
+          key.includes("timestamp")
+        ) {
+          if (typeof val === "string") headers[key] = val;
+        }
+      }
+
+      const forwardRes = await fetch(targetUrl, {
+        method: req.method,
+        headers,
+        body: ["POST", "PUT", "PATCH"].includes(req.method)
+          ? JSON.stringify(req.body || {})
+          : undefined,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const contentType = forwardRes.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await forwardRes.json().catch(() => ({}));
+        res.status(forwardRes.status).json(data);
+      } else {
+        const text = await forwardRes.text();
+        res.status(forwardRes.status).type(contentType).send(text);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(503).json({
+        error: "Hub webhook processor unavailable",
+        target: `${hubBaseUrl}${req.originalUrl}`,
+        details: message,
+      });
+    }
+  });
+}
+
+function mountOpenApiRoutes(app: express.Express): void {
+  const getOpenApiContent = (): { rawYaml: string; parsedJson: any } | null => {
+    const candidatePaths = [
+      path.resolve(process.cwd(), "internal-api.openapi.yaml"),
+      path.resolve(process.cwd(), "zencode/internal-api.openapi.yaml"),
+      "/workspace/zencode-ent/zencode/internal-api.openapi.yaml",
+      "/home/zen/zencode-ent/zencode/internal-api.openapi.yaml",
+      "/home/zen/zencode/paseo/internal-api.openapi.yaml",
+    ];
+
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const rawYaml = fs.readFileSync(p, "utf-8");
+          let parsedJson: any = null;
+          try {
+            parsedJson = yaml.parse(rawYaml);
+          } catch {
+            // ignore parse error
+          }
+          return { rawYaml, parsedJson };
+        } catch {
+          // ignore read error
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleOpenApiYaml = (_req: express.Request, res: express.Response) => {
+    const result = getOpenApiContent();
+    if (!result) {
+      res.status(404).json({ error: "OpenAPI specification not found" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/yaml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(result.rawYaml);
+  };
+
+  const handleOpenApiJson = (_req: express.Request, res: express.Response) => {
+    const result = getOpenApiContent();
+    if (!result || !result.parsedJson) {
+      res.status(404).json({ error: "OpenAPI specification not found" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json(result.parsedJson);
+  };
+
+  app.get("/internal-api.openapi.yaml", handleOpenApiYaml);
+  app.get("/api/internal-api.openapi.yaml", handleOpenApiYaml);
+  app.get("/api/openapi.json", handleOpenApiJson);
+  app.get("/openapi.json", handleOpenApiJson);
 }
 
 function mountZencodeFleetAndGoalEndpoints(
@@ -1218,8 +1365,43 @@ function mountZencodeFleetAndGoalEndpoints(
     })();
   });
 
-  app.get("/api/fleet/summary", (_req, res) => {
-    res.json({ summary: fleetRegistry.getClusterSummary() });
+  app.get("/api/fleet/summary", async (_req, res) => {
+    try {
+      // First attempt to fetch live multi-swarm telemetry from 9router on port 7777
+      try {
+        const routerRes = await fetch("http://127.0.0.1:7777/api/fleet/summary", {
+          signal: AbortSignal.timeout(1000),
+        });
+        if (routerRes.ok) {
+          const routerData = (await routerRes.json()) as Record<string, unknown>;
+          return res.json({
+            summary: fleetRegistry.getClusterSummary(),
+            nodeSwarm: routerData.nodeSwarm || routerData.node_swarm,
+            modalGpuSwarm: routerData.modalGpuSwarm || routerData.modal_gpu_swarm,
+            clefDecisionSwarm: routerData.clefDecisionSwarm || routerData.clef_decision_swarm,
+            node_swarm: routerData.nodeSwarm || routerData.node_swarm,
+            modal_gpu_swarm: routerData.modalGpuSwarm || routerData.modal_gpu_swarm,
+            clef_decision_swarm: routerData.clefDecisionSwarm || routerData.clef_decision_swarm,
+          });
+        }
+      } catch {
+        // 9router unreachable or timed out; fall back to in-process multi-swarm state
+      }
+
+      const multi = fleetRegistry.getMultiSwarmSummary();
+      res.json({
+        summary: fleetRegistry.getClusterSummary(),
+        nodeSwarm: multi.nodeSwarm,
+        modalGpuSwarm: multi.modalGpuSwarm,
+        clefDecisionSwarm: multi.clefDecisionSwarm,
+        node_swarm: multi.nodeSwarm,
+        modal_gpu_swarm: multi.modalGpuSwarm,
+        clef_decision_swarm: multi.clefDecisionSwarm,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   app.get("/api/fleet/jobs", (_req, res) => {
@@ -2977,6 +3159,9 @@ export async function createPaseoDaemon(
 
   // Hub Webhook Ingress Proxy Routes (linear, slack, github -> hub:3000)
   mountHubWebhookProxyRoutes(app);
+
+  // OpenAPI 3.1 specification serving
+  mountOpenApiRoutes(app);
 
   // Zencode Swarm & Autonomous endpoints
   mountZencodeFleetAndGoalEndpoints(app, fleetRegistry, nineRouter, goalEngine, swarm.selfHealing);

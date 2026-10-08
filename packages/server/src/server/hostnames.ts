@@ -43,6 +43,7 @@ function isDefaultAllowedHostname(hostname: string): boolean {
   if (hostname === "localhost") return true;
   if (hostname.endsWith(".localhost")) return true;
   if (net.isIP(hostname) !== 0) return true;
+  if (hostname === "zencode.vn" || hostname.endsWith(".zencode.vn")) return true;
   return false;
 }
 
